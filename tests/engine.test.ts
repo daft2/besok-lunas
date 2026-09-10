@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fresh as newRun, spin, evaluate, cost, buyUpgrade, upgradeCost, unlockSultan, payBill, endRun, prestige, parseSave, parseBank, queueEvents, markFired, insightEarned, type Grid, type SaveBank, advanceTime, quoteLoan, borrow, repayLoan, loanDue, startJob, jobStep, cascade, tier, minimumCost, baseCost, unlockMachine, beginFinale, revealFinale, finaleReady, totalDebt, endDay, remainingTime, jobMinutes, spinMinutes, dayCapacity, canWork, moveLane, makeRoad, jobReward, ROAD_LENGTH, jobQuote } from '../src/engine';
+import { fresh as newRun, spin, evaluate, cost, buyUpgrade, upgradeCost, unlockSultan, payBill, endRun, prestige, parseSave, parseBank, queueEvents, markFired, insightEarned, motionReduced, type Grid, type SaveBank, advanceTime, quoteLoan, borrow, repayLoan, loanDue, startJob, jobStep, cascade, tier, minimumCost, baseCost, unlockMachine, beginFinale, revealFinale, finaleReady, totalDebt, endDay, remainingTime, jobMinutes, spinMinutes, dayCapacity, canWork, moveLane, makeRoad, jobReward, ROAD_LENGTH, jobQuote } from '../src/engine';
 
 const fresh = (insight = 0, runs = 1) => { const s = newRun(insight, runs); s.cash = 45000 + insight * 5000; return s; };
 
@@ -307,6 +307,27 @@ test('three slots store independent cash', () => {
   assert.equal(bank.slots[0]!.muted, true);
   assert.equal(bank.slots[1]!.muted, true);
   assert.equal(bank.settings.muted, true);
+});
+
+test('parseSave accepts story.view menu', () => {
+  const s = fresh(); s.story.view = 'menu';
+  assert.equal(parseSave(JSON.stringify(s))!.story.view, 'menu');
+});
+
+test('parseBank keeps valid slots when one slot is corrupt', () => {
+  const a = fresh(); a.cash = 18000;
+  const stored = { version: 6, activeSlot: 0, slots: [a, { version: 5, cash: -1 }, null], settings: { muted: false, reducedMotion: true } };
+  const bank = parseBank(JSON.stringify(stored))!;
+  assert.equal(bank.slots[0]!.cash, 18000);
+  assert.equal(bank.slots[1], null);
+  assert.equal(bank.slots[2], null);
+  assert.equal(bank.settings.reducedMotion, true);
+});
+
+test('motionReduced is settings or the OS media query', () => {
+  assert.equal(motionReduced({ muted: false, reducedMotion: true }, false), true);
+  assert.equal(motionReduced({ muted: false, reducedMotion: false }, true), true);
+  assert.equal(motionReduced({ muted: false, reducedMotion: false }, false), false);
 });
 
 test('queueEvents is idempotent for the same id', () => {

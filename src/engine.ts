@@ -26,7 +26,7 @@ export interface Loan { principal: number; interest: number; balance: number; du
 export interface RoadRow { obstacles: number[]; order: number | null; }
 export interface Job { step: number; net: number; fare: number; fuel: number; lane: number; hits: number; orders: number; damage: number; rows: RoadRow[]; }
 export interface StoryState {
-  intro: number; guide: number; view: 'room' | 'game' | 'phone'; read: string[]; finale: { roll: number; revealed: number } | null;
+  intro: number; guide: number; view: 'room' | 'game' | 'phone' | 'menu'; read: string[]; finale: { roll: number; revealed: number } | null;
   flags: string[]; fired: string[]; threads: Record<string, { cursor: number }>; pending: string[];
 }
 export type SlotIndex = 0 | 1 | 2;
@@ -252,7 +252,7 @@ export function parseSave(raw: string | null): State | null {
       if (!l || !['principal','interest','balance','due','nextLate','lateCount','fees'].every(k => Number.isSafeInteger(l[k as keyof Loan]) && l[k as keyof Loan] >= 0) || l.balance <= 0 || l.lateCount > 3 || l.nextLate < l.due) return null;
     }
     const story = s.story;
-    if (!story || !Number.isInteger(story.intro) || story.intro < 0 || story.intro > 4 || !Number.isInteger(story.guide) || story.guide < 0 || story.guide > 3 || !['room','game','phone'].includes(story.view) || !Array.isArray(story.read) || story.read.some(id => typeof id !== 'string' || id.length > 40)) return null;
+    if (!story || !Number.isInteger(story.intro) || story.intro < 0 || story.intro > 4 || !Number.isInteger(story.guide) || story.guide < 0 || story.guide > 3 || !['room','game','phone','menu'].includes(story.view) || !Array.isArray(story.read) || story.read.some(id => typeof id !== 'string' || id.length > 40)) return null;
     if (story.finale !== null && (!story.finale || !Number.isInteger(story.finale.roll) || story.finale.roll < 0 || story.finale.roll > 99 || !Number.isInteger(story.finale.revealed) || story.finale.revealed < 0 || story.finale.revealed > 3 || (story.finale.revealed === 3) !== s.ended)) return null;
     if (story.flags === undefined) story.flags = [];
     else if (!Array.isArray(story.flags) || story.flags.some(id => typeof id !== 'string')) return null;
@@ -268,6 +268,10 @@ export function parseSave(raw: string | null): State | null {
   } catch { return null; }
 }
 
+export function motionReduced(settings: SaveSettings, preferReduce?: boolean): boolean {
+  const os = preferReduce ?? (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  return settings.reducedMotion || Boolean(os);
+}
 export function wrapState(state: State, settings?: SaveSettings): SaveBank {
   return { version: 6, activeSlot: 0, slots: [state, null, null], settings: settings ?? { muted: state.muted, reducedMotion: false } };
 }
@@ -285,7 +289,7 @@ export function parseBank(raw: string | null): SaveBank | null {
         const slot = input.slots[i];
         if (slot === null) continue;
         const parsed = parseSave(JSON.stringify(slot));
-        if (!parsed) return null;
+        if (!parsed) continue;
         parsed.muted = settings.muted;
         slots[i] = parsed;
       }

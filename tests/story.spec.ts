@@ -1,9 +1,15 @@
 import {finishRide} from './ride-helper';
 import {test,expect,type Page} from '@playwright/test';
 import {fresh,parseBank,SAVE_KEY,type State} from '../src/engine';
+async function resume(page:Page){
+  await page.locator('#menu-continue').click();
+}
 async function load(page:Page,s?:State|object){
   if(s)await page.addInitScript(({s,key})=>{if(!sessionStorage.getItem('story-seeded')){localStorage.setItem(key,JSON.stringify(s));sessionStorage.setItem('story-seeded','1');}},{s,key:SAVE_KEY});
-  await page.goto('/');await expect(page.locator('#story-layer')).toBeVisible();
+  await page.goto('/');
+  if(s)await resume(page);
+  else await page.locator('#menu-start').click();
+  await expect(page.locator('#story-layer')).toBeVisible();
 }
 async function read(page:Page):Promise<State>{
   const raw=await page.evaluate(key=>localStorage.getItem(key),SAVE_KEY);
@@ -13,9 +19,10 @@ async function read(page:Page):Promise<State>{
   return active;
 }
 const candidate=()=>{const s=fresh();s.story.intro=4;s.story.guide=3;s.story.view='phone';s.spins=100;s.totalWon=150000;s.cascadeUnlocked=true;s.cash=45000;return s;};
-test('opening is a resumable illustrated prologue; slots are not the first screen',async({page})=>{
- await load(page);await expect(page.locator('.comic-caption')).toContainText('Bima');await expect(page.locator('#spin')).not.toBeVisible();
- await page.locator('[data-story=next]').click();await page.reload();await expect(page.locator('.comic-caption')).toContainText('giliranmu');
+test('title then Mulai reaches a resumable illustrated prologue',async({page})=>{
+ await page.goto('/');await expect(page.locator('#menu-start')).toBeVisible();await expect(page.locator('#menu-continue')).toBeDisabled();
+ await page.locator('#menu-start').click();await expect(page.locator('.comic-caption')).toContainText('Bima');await expect(page.locator('#spin')).not.toBeVisible();
+ await page.locator('[data-story=next]').click();await page.reload();await resume(page);await expect(page.locator('.comic-caption')).toContainText('giliranmu');
  for(let i=0;i<3;i++)await page.locator('[data-story=next]').click();
  await expect(page.locator('.room-title')).toContainText('Angkat ponselmu');await expect(page.locator('.home-obligation')).toContainText('Rp75.000.000');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -35,7 +42,7 @@ test('phone messages and shop work independently; room keyboard cannot spin the 
  const s=fresh();s.story.intro=4;s.story.guide=3;s.cash=20000;s.spins=60;
  await load(page,s);await page.keyboard.press('Space');expect((await read(page)).spins).toBe(60);
  await page.locator('.phone-object').click();await page.locator('[data-story=messages]').click();await expect(page.locator('.message-list>button')).toHaveCount(5);
- await page.keyboard.press('Escape');await expect(page.locator('.smartphone')).not.toBeVisible();
+ await page.locator('.phone-close').click();await expect(page.locator('.smartphone')).not.toBeVisible();
  await page.locator('.phone-object').click();await page.locator('[data-story=shop]').click();
  await page.locator('.smartphone [data-upgrade=payout]').click();expect((await read(page)).upgrades.payout).toBe(1);
  await expect(page.locator('.smartphone .progression-tree')).toBeVisible();await page.locator('.smartphone footer [data-story=home]').click();await expect(page.locator('.phone-app-grid')).toBeVisible();
@@ -55,7 +62,7 @@ test('bad finale locks once, survives refresh with changed randomness and ends t
  await page.addInitScript(()=>{const draw=sessionStorage.getItem('drawn')?0:.5;Math.random=()=>draw;sessionStorage.setItem('drawn','1');});
  await load(page,candidate());await page.locator('[data-story=finale]').click();await page.locator('[data-action=begin-finale]').click();
  expect((await read(page)).story.finale?.roll).toBe(50);expect((await read(page)).cash).toBe(35000);
- await page.locator('[data-action=reveal-finale]:enabled').click();await page.reload();
+ await page.locator('[data-action=reveal-finale]:enabled').click();await page.reload();await resume(page);
  await expect(page.locator('.final-seals .revealed')).toHaveCount(1);expect((await read(page)).story.finale?.roll).toBe(50);
  for(let i=0;i<2;i++)await page.locator('[data-action=reveal-finale]:enabled').click();
  await expect(page.locator('#modal-body')).toContainText('99 DARI 100');expect((await read(page)).cash).toBe(0);expect((await read(page)).familyDebt).toBe(75000000);
@@ -65,7 +72,7 @@ test('rare good finale clears obligations and shows the family epilogue',async({
  await page.addInitScript(()=>{Math.random=()=>0;});await load(page,candidate());await page.locator('[data-story=finale]').click();await page.locator('[data-action=begin-finale]').click();
  for(let i=0;i<3;i++)await page.locator('[data-action=reveal-finale]:enabled').click();
  await expect(page.locator('#modal-body')).toContainText('Akhirnya, pulang.');const s=await read(page);expect(s.familyDebt).toBe(0);expect(s.debt).toBe(0);expect(s.ended).toBe(true);expect(s.cash).toBe(24960000);
- await page.reload();await expect(page.locator('#modal-body')).toContainText('Akhirnya, pulang.');
+ await page.reload();await resume(page);await expect(page.locator('#modal-body')).toContainText('Akhirnya, pulang.');
 });
 
 test('phone upgrade tree enforces parents and Ojol rewards reflect the purchased branch',async({page})=>{

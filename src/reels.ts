@@ -12,7 +12,7 @@ export class ReelScene extends Phaser.Scene {
   private mode = 0;
   private rowY(row: number) { return this.mode ? 55 + row * 110 : -10 + row * 175; }
   private iconSize() { return this.mode ? 104 : 175; }
-  private reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  private get reduce() { return document.documentElement.dataset.reducedMotion === 'true'; }
   constructor(grid: Grid, ready: (s: ReelScene) => void) { super('Reels'); this.initial = grid; this.readyCallback = ready; }
   preload() { this.load.image('symbols', '/assets/symbols-v2.png'); }
   create() {

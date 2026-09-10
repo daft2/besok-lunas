@@ -7,6 +7,7 @@ import '@fontsource/barlow-condensed/800.css';
 import '@fontsource/barlow-condensed/900.css';
 import './style.css';
 import { fresh, spin, cost, multiplier, upgradeCost, buyUpgrade, payBill, endRun, prestige, insightEarned, parseBank, wrapState, SAVE_KEY, SYMBOLS, UPGRADES, machineRequirement, type State, type SaveBank, type Upgrade, tier, feeRate, baseCost, minimumCost, totalDebt, loanDue, blocked as engineBlocked, nextBill, unlockMachine, LOAN_AMOUNTS, quoteLoan, borrow, repayLoan, jobQuote, startJob, jobStep, remainingTime, spinMinutes, jobMinutes, canWork, endDay, dailyObligations, clockTime, finaleReady, beginFinale, revealFinale, FINALE_COST } from './engine';
+import { GameShell, emptyBank, menuState, applyReducedMotion } from './menu';
 import { createReels, type ReelScene } from './reels';
 import { GameAudio } from './audio';
 import { StoryDirector } from './story';
@@ -20,23 +21,15 @@ import {RiderGame} from './rider';
 const money = (n: number) => 'Rp' + Math.round(n).toLocaleString('id-ID');
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-let state: State;
 let bank: SaveBank;
 try {
-  const loaded = parseBank(localStorage.getItem(SAVE_KEY));
-  if (loaded) {
-    bank = loaded;
-    state = bank.slots[bank.activeSlot] ?? fresh();
-    if (!bank.slots[bank.activeSlot]) bank.slots[bank.activeSlot] = state;
-    state.muted = bank.settings.muted;
-  } else {
-    state = fresh();
-    bank = wrapState(state);
-  }
-} catch { state = fresh(); bank = wrapState(state); }
+  bank = parseBank(localStorage.getItem(SAVE_KEY)) ?? emptyBank();
+} catch { bank = emptyBank(); }
+let state: State = menuState(bank);
 let busy = false, auto = false, held: number | null = null, scene: ReelScene | undefined;
 let autoTimer: ReturnType<typeof setTimeout> | undefined;
-const audio = new GameAudio(); audio.muted = state.muted;
+const audio = new GameAudio(); audio.muted = bank.settings.muted;
+let shell: GameShell;
 let storageFailed = false;
 let story: StoryDirector | undefined;
 let rider: RiderGame | undefined;
@@ -47,7 +40,7 @@ $('app').innerHTML = `
     <header class="topbar">
       <a class="wordmark" href="#" aria-label="Besok Lunas"><span>BESOK</span><strong>LUNAS<span class="wordmark-dot">!</span></strong></a>
       <div class="tagline">SEKALI LAGI,<br><b>PASTI BALIK.</b></div>
-      <div class="top-actions"><button id="back-room" class="room-back">← Kamar</button><button id="open-phone" class="room-back">Ponsel ▣</button><span class="prototype">CORE PLAYTEST <i>0.5</i></span><button id="sound" class="icon-button" aria-label="Nyalakan suara">♪</button><button id="help" class="icon-button" aria-label="Cara bermain">?</button></div>
+      <div class="top-actions"><button id="system-open" data-shell="system" class="room-back">Menu</button><button id="back-room" class="room-back">← Kamar</button><button id="open-phone" class="room-back">Ponsel ▣</button><span class="prototype">CORE PLAYTEST <i>0.5</i></span><button id="sound" class="icon-button" aria-label="Nyalakan suara">♪</button><button id="help" class="icon-button" aria-label="Cara bermain">?</button></div>
     </header>
     <section class="wallet-bar" aria-label="Keuangan">
       <div class="wallet-item balance"><span class="wallet-icon">Rp</span><div><small>SALDO DI TANGAN</small><strong id="cash"></strong></div></div>
@@ -102,15 +95,21 @@ $('app').innerHTML = `
   <div class="toast" id="toast" role="status"></div>
 `;
 
-function save() {
+function persistBank() {
   try {
-    bank.settings.muted = state.muted;
-    bank.slots[bank.activeSlot] = state;
     localStorage.setItem(SAVE_KEY, JSON.stringify(bank));
     storageFailed = false;
   }
   catch { storageFailed = true; }
-  $('save-status').innerHTML = storageFailed ? 'Save tidak tersedia' : '<i></i> Tersimpan lokal';
+  const status = document.getElementById('save-status');
+  if (status) status.innerHTML = storageFailed ? 'Save tidak tersedia' : '<i></i> Tersimpan lokal';
+}
+function save() {
+  if (shell?.inRun && state.story.view !== 'menu') {
+    bank.settings.muted = state.muted;
+    bank.slots[bank.activeSlot] = state;
+  }
+  persistBank();
 }
 function setButton(id: string, disabled: boolean) { $<HTMLButtonElement>(id).disabled = disabled; }
 function render() {
@@ -187,6 +186,7 @@ function showEnding() {
   showModal(`<div class="eyebrow">AKHIR NASIB KE-${state.runs}</div><h2>Besok belum lunas.</h2><p>${escape(state.ending || "Mesin berhenti. Utangnya tinggal.")}</p><div class="ending-receipt"><span>Total hadiah masuk<b>${money(state.totalWon)}</b></span><span>Saldo tersisa<b>${money(state.cash)}</b></span><span>Utang tersisa<b>${money(totalDebt(state))}</b></span><span>Putaran dimainkan<b>${state.spins}</b></span></div><blockquote>“Tinggal satu kali menang lagi.”</blockquote><p>Ulang dengan <b>+${insightEarned(state)} ingatan</b>. Setiap ingatan memberi +Rp5.000 modal awal dan +2% pengali hadiah (maks. +50%).</p><button class="primary-button" data-action="rebirth">ULANG NASIB ↻</button>`, true);
 }
 function checkAfterSpin() {
+  if (shell.phase !== 'playing') return;
   if (state.story.intro < 4) return;
   if (state.story.finale) { showFinale(); return; }
   if (state.ended) { showEnding(); return; }
@@ -197,7 +197,7 @@ function checkAfterSpin() {
   if (state.cash < cost(state)) { stopAuto(); toast('Saldo di bawah biaya spin. Turunkan taruhan, pindah mesin, atau narik ojol.'); render(); }
 }
 async function doSpin() {
-  if (busy || !scene || state.story.intro < 4 || state.story.view !== 'game' || $<HTMLDialogElement>('modal').open) return;
+  if (shell.phase !== 'playing' || busy || !scene || state.story.intro < 4 || state.story.view !== 'game' || $<HTMLDialogElement>('modal').open) return;
   audio.unlock();
 
   const result = spin(state, held);
@@ -261,7 +261,7 @@ document.addEventListener('click', e => {
     case 'back-room': if (!busy) { stopAuto(); story?.toRoom(); } break;
     case 'open-phone': if (!busy) { stopAuto(); story?.toPhone(); } break;
     case 'spin': void doSpin(); break;
-    case 'sound': state.muted = !state.muted; audio.muted = state.muted; save(); render(); break;
+    case 'sound': state.muted = !state.muted; bank.settings.muted = state.muted; audio.muted = state.muted; save(); render(); break;
     case 'help': showHelp(); break;
     case 'odds': showOdds(); break;
     case 'close-modal': closeModal(); break;
@@ -299,7 +299,7 @@ document.addEventListener('click', e => {
     case 'unlock': { const m = Number(b.dataset.machine) as 1 | 2; if (unlockMachine(state, m)) { closeModal(); setMachine(m); audio.play('buy'); save(); render(); checkAfterSpin(); } break; }
     case 'rebirth': case 'reset':
       if (busy) break; stopAuto();
-      if (b.dataset.action === 'reset') { state = fresh(); bank = wrapState(state); }
+      if (b.dataset.action === 'reset') { state = fresh(); state.muted = bank.settings.muted; bank = wrapState(state, bank.settings); }
       else state = prestige(state);
       audio.muted = state.muted; held = null;
       scene?.display(state.grid); scene?.setMode(0); closeModal(); save(); render(); selectTab('machine');
@@ -308,7 +308,7 @@ document.addEventListener('click', e => {
 });
 $<HTMLDialogElement>('modal').addEventListener('cancel', e => { if ($<HTMLDialogElement>('modal').dataset.locked === 'true') e.preventDefault(); else {rider?.destroy();rider=undefined;} });
 document.addEventListener('keydown', e => {
-  if (e.repeat || state.story.intro < 4 || state.story.view !== 'game' || $<HTMLDialogElement>('modal').open || ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) return;
+  if (shell.phase !== 'playing' || e.repeat || state.story.intro < 4 || state.story.view !== 'game' || $<HTMLDialogElement>('modal').open || ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) return;
   if ((e.target as HTMLElement).tagName === 'BUTTON' && [' ', 'Enter'].includes(e.key)) return;
   if (e.code === 'Space') { e.preventDefault(); void doSpin(); }
   if (['1', '2', '3'].includes(e.key)) $<HTMLButtonElement>(`hold-${Number(e.key) - 1}`).click();
@@ -316,17 +316,61 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { stopAuto(); save(); render(); } });
 window.addEventListener('pagehide', save);
+function enterPlay() {
+  applyReducedMotion(bank.settings);
+  audio.muted = state.muted;
+  if (state.story.view === 'menu') state.story.view = 'room';
+  scene?.display(state.grid);
+  scene?.setMode(state.machine);
+  story?.render();
+  render();
+  describeMachine();
+  if (scene) checkAfterSpin();
+}
+function leavePlay() {
+  stopAuto();
+  closeModal();
+  rider?.destroy(); rider = undefined;
+  story?.render();
+  render();
+}
+shell = new GameShell({
+  bank: () => bank,
+  state: () => state,
+  setBank: next => { bank = next; },
+  setState: next => { state = next; audio.muted = next.muted; },
+  persist: persistBank,
+  persistRun: save,
+  applyAudio: () => { audio.muted = state.muted; },
+  enterPlay,
+  leavePlay,
+  lockedModal: () => $<HTMLDialogElement>('modal').open && $<HTMLDialogElement>('modal').dataset.locked === 'true',
+  rideOverlayOpen: () => {
+    const overlay = document.getElementById('ride-overlay');
+    return !!overlay && !overlay.hidden;
+  },
+  pauseRide: () => {
+    const overlay = document.getElementById('ride-overlay');
+    if (overlay?.hidden) document.getElementById('ride-pause')?.click();
+  },
+  notice: toast,
+});
 story = new StoryDirector({ state: () => state, save, work: showWork, finance: showFinance,
   game: () => { stopAuto(); selectTab('machine'); render(); if(state.story.guide===2)requestAnimationFrame(()=>$('spin').scrollIntoView({block:'center',behavior:'smooth'})); },
   shop: () => { stopAuto(); selectTab('workshop'); render(); },
   finale: showFinale, restart: openPrestige,
   leaveApp: () => {rider?.destroy();rider=undefined;},
   blocked: () => busy || $<HTMLDialogElement>('modal').open,
+  onEscape: () => shell.handleEscape(),
+  system: () => shell.openSystem(),
 });
+shell.boot();
 story.render();
 createReels(state.grid, ready => {
-  scene = ready; scene.setMode(state.machine); $('loading').hidden = true; render(); describeMachine();
-  save(); checkAfterSpin();
+  scene = ready; $('loading').hidden = true;
+  if (shell.phase === 'playing') {
+    scene.display(state.grid); scene.setMode(state.machine); render(); describeMachine(); checkAfterSpin();
+  }
 });
 render();
 

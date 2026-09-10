@@ -2,10 +2,14 @@ import {finishRide} from './ride-helper';
 import { test, expect, type Page } from '@playwright/test';
 import { fresh as newRun, parseBank, SAVE_KEY, type State } from '../src/engine';
 const fresh = (insight = 0) => { const s = newRun(insight); s.cash = 45000 + insight * 5000; return s; };
+async function resume(page: Page) {
+  await page.locator('#menu-continue').click();
+}
 async function start(page: Page, state: State = fresh()) {
   state.story.intro = 4; state.story.guide = 3; state.story.view = 'game';
   if (state) await page.addInitScript(({ key, value }) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem(key, value); sessionStorage.setItem('seeded', 'yes'); } }, { key: SAVE_KEY, value: JSON.stringify(state) });
   await page.goto('/');
+  await resume(page);
   await expect(page.locator('#loading')).toBeHidden();
 }
 async function tab(page: Page, name: string) {
@@ -26,7 +30,7 @@ test('renders assets, runs a spin, persists its outcome and has no viewport over
   await start(page); await expect(page.locator('canvas')).toHaveCount(1);
   await page.locator('#spin').click(); await expect(page.locator('#spin-label')).toHaveText('PUTAR');
   const s = await saved(page); expect(s.spins).toBe(1); expect(s.cash).toBe(45000 - 1000 + s.totalWon);
-  await page.reload(); await expect(page.locator('#loading')).toBeHidden();
+  await page.reload(); await resume(page); await expect(page.locator('#loading')).toBeHidden();
   expect((await saved(page)).grid).toEqual(s.grid); expect((await saved(page)).cash).toBe(s.cash);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
@@ -69,7 +73,7 @@ test('prestige requires a review, preserves insight, and resets the run', async 
 test('unpayable exhausted kos day ends the run and refresh keeps the ending',async({page})=>{
  const s=fresh();s.day=3;s.bill=4000;s.cash=500;s.minutes=600;
  await start(page,s);await expect(page.locator('[data-action=work]')).toHaveCount(0);await page.locator('[data-action=end-day]').click();
- await expect(page.locator('#modal-body')).toContainText('Cicilan kos tidak terbayar');await page.reload();await expect(page.locator('#modal-body')).toContainText('Cicilan kos tidak terbayar');
+ await expect(page.locator('#modal-body')).toContainText('Cicilan kos tidak terbayar');await page.reload(); await resume(page);await expect(page.locator('#modal-body')).toContainText('Cicilan kos tidak terbayar');
  await page.locator('[data-action=rebirth]').click();expect((await saved(page)).day).toBe(1);expect((await saved(page)).ended).toBe(false);
 });
 
@@ -85,9 +89,9 @@ test('help and odds controls are functional and reduced motion still resolves a 
 test('zero-cash rider pays once, reserves two hours, resumes its saved road',async({page})=>{
  await start(page,newRun());await page.locator('[data-action=work]').click();await page.locator('[data-action=start-job]').click();
  const before=await saved(page);expect(before.minutes).toBe(120);expect(before.cash).toBe(0);
- await page.locator('[data-lane="0"]').click();await page.reload();expect((await saved(page)).job?.rows).toEqual(before.job?.rows);expect((await saved(page)).job?.lane).toBe(0);
+ await page.locator('[data-lane="0"]').click();await page.reload(); await resume(page);expect((await saved(page)).job?.rows).toEqual(before.job?.rows);expect((await saved(page)).job?.lane).toBe(0);
  await finishRide(page);const after=await saved(page);expect(after.cash).toBeGreaterThanOrEqual(1000);expect(after.minutes).toBe(120);expect(after.deliveries).toBe(1);
- await page.reload();expect((await saved(page)).cash).toBe(after.cash);
+ await page.reload(); await resume(page);expect((await saved(page)).cash).toBe(after.cash);
 });
 
 test('rider keyboard and touch controls change lanes; completing work preserves upgrades',async({page})=>{
@@ -112,7 +116,7 @@ test('due-day work is bounded by remaining time and a shortfall ends in reposses
  await start(page,s);await expect(page.locator('#spin')).toBeDisabled();await expect(page.locator('#ojol')).toBeDisabled();
  await expect(page.locator('#modal-body')).toContainText('run berakhir');await page.locator('[data-action=end-day]').click();
  await expect(page.locator('#modal-body')).toContainText('Motor ditarik');expect((await saved(page)).ended).toBe(true);
- await page.reload();await expect(page.locator('#modal-body')).toContainText('Motor ditarik');
+ await page.reload(); await resume(page);await expect(page.locator('#modal-body')).toContainText('Motor ditarik');
 });
 
 test('cascade machine visibly resolves three multiplier stages with no hold', async ({ page }) => {
@@ -141,7 +145,7 @@ test('rider pause freezes progress and a completed checkpoint survives refresh',
  await page.clock.install();await page.locator('#ride-go').click();await page.clock.runFor(3300);
  expect((await saved(page)).job?.step).toBe(1);expect((await saved(page)).job?.orders).toBe(1);
  await page.locator('#ride-pause').click();await page.clock.runFor(4000);expect((await saved(page)).job?.step).toBe(1);
- await page.reload();await expect(page.locator('#ride-overlay')).toBeVisible();expect((await saved(page)).job?.step).toBe(1);expect((await saved(page)).minutes).toBe(120);
+ await page.reload(); await resume(page);await expect(page.locator('#ride-overlay')).toBeVisible();expect((await saved(page)).job?.step).toBe(1);expect((await saved(page)).minutes).toBe(120);
 });
 
 test('road taps select a lane and pause exposes the correct action',async({page,isMobile})=>{

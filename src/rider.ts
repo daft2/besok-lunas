@@ -5,7 +5,7 @@ type Particle = {x:number;y:number;vx:number;vy:number;life:number;color:string}
 /** The saved route owns outcomes. Animation never draws another random route. */
 export class RiderGame {
   private frame=0; private elapsed=0; private last=0; private paused=true; private dead=false;
-  private touchX=0; private touchY=0; private reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches; private waveMs=1800; private visualLane=1; private travel=0; private flash=0;
+  private touchX=0; private touchY=0; private waveMs=1800; private visualLane=1; private travel=0; private flash=0;
   private particles:Particle[]=[]; private feedback='Ambil order. Cari celah. Pulang bawa hasil.';
   private canvas:HTMLCanvasElement; private ctx:CanvasRenderingContext2D;
   private atlas=new Image(); private road=new Image();
@@ -36,7 +36,7 @@ export class RiderGame {
     this.host.querySelector('#ride-feedback')!.textContent=j.step===0?'01 · Tas di tengah. Tetap di lajur tengah.':j.step===1?'02 · Pembatas di tengah! Pindah ke kiri atau kanan.':this.feedback;
     this.host.querySelectorAll<HTMLButtonElement>('[data-lane]').forEach(b=>{b.classList.toggle('selected',Number(b.dataset.lane)===j.lane);b.setAttribute('aria-pressed',String(Number(b.dataset.lane)===j.lane));});
   }
-  private burst(hit:boolean,lane:number){this.flash=hit&&!this.reducedMotion?1:0;for(let i=0;i<18;i++){const a=i*Math.PI*2/18;this.particles.push({x:106+lane*104,y:493,vx:Math.cos(a)*75,vy:Math.sin(a)*75-45,life:1,color:hit?(i%2?'#ff9362':'#ffe4a3'):(i%2?'#fbd569':'#baff8e')});}this.host.querySelector('#ride-feedback')!.classList.toggle('is-hit',hit);}
+  private burst(hit:boolean,lane:number){this.flash=hit&&document.documentElement.dataset.reducedMotion!=='true'?1:0;for(let i=0;i<18;i++){const a=i*Math.PI*2/18;this.particles.push({x:106+lane*104,y:493,vx:Math.cos(a)*75,vy:Math.sin(a)*75-45,life:1,color:hit?(i%2?'#ff9362':'#ffe4a3'):(i%2?'#fbd569':'#baff8e')});}this.host.querySelector('#ride-feedback')!.classList.toggle('is-hit',hit);}
   private tick=(time:number)=>{if(this.dead)return;const dt=this.last?Math.min(100,time-this.last):0;this.last=time;
     if(!this.paused){this.elapsed+=dt;this.travel+=dt*.12;const j=this.state().job;this.waveMs=j&&j.step<2?3000:1800;
       if(j&&this.elapsed>=this.waveMs){this.elapsed=0;const hits=j.hits,orders=j.orders,before=jobReward(j);jobStep(this.state());this.save();const delta=jobReward(j)-before;
