@@ -25,7 +25,14 @@ export interface Entry { text: string; kind: 'win' | 'loss' | 'info'; }
 export interface Loan { principal: number; interest: number; balance: number; due: number; nextLate: number; lateCount: number; fees: number; }
 export interface RoadRow { obstacles: number[]; order: number | null; }
 export interface Job { step: number; net: number; fare: number; fuel: number; lane: number; hits: number; orders: number; damage: number; rows: RoadRow[]; }
-export interface StoryState { intro: number; guide: number; view: 'room' | 'game' | 'phone'; read: string[]; finale: { roll: number; revealed: number } | null; }
+export interface StoryState {
+  intro: number; guide: number; view: 'room' | 'game' | 'phone'; read: string[]; finale: { roll: number; revealed: number } | null;
+  flags: string[]; fired: string[]; threads: Record<string, { cursor: number }>; pending: string[];
+}
+export type SlotIndex = 0 | 1 | 2;
+export interface SaveSettings { muted: boolean; reducedMotion: boolean; }
+export interface SaveBank { version: 6; activeSlot: SlotIndex; slots: [State | null, State | null, State | null]; settings: SaveSettings; }
+export interface EventRow { id: string; }
 export interface State {
   version: 5; day: number; minutes: number; pityLosses: number; familyDebt: number; story: StoryState; cash: number; debt: number; spins: number; totalWon: number; bestWin: number;
   insight: number; runs: number; bet: number; machine: 0 | 1 | 2; sultanUnlocked: boolean; cascadeUnlocked: boolean;
@@ -34,7 +41,7 @@ export interface State {
   turns: number; deliveries: number; workEarned: number; job: Job | null; loan: Loan | null; ending: string;
 }
 export const fresh = (insight = 0, runs = 1): State => ({
-  version: 5, day: 1, minutes: 0, pityLosses: 0, familyDebt: 75000000, story: { intro: 0, guide: 0, view: 'room', read: [], finale: null }, cash: insight * 5000, debt: 75000, spins: 0, totalWon: 0, bestWin: 0,
+  version: 5, day: 1, minutes: 0, pityLosses: 0, familyDebt: 75000000, story: { intro: 0, guide: 0, view: 'room', read: [], finale: null, flags: [], fired: [], threads: {}, pending: [] }, cash: insight * 5000, debt: 75000, spins: 0, totalWon: 0, bestWin: 0,
   insight, runs, bet: 1000, machine: 0, sultanUnlocked: false, cascadeUnlocked: false,
   upgrades: { payout: 0, hold: 0, turbo: 0, auto: 0, stamina: 0, efficient: 0, luck: 0, fare: 0, orders: 0, safety: 0 }, grid: [[1, 0, 3], [2, 5, 0], [4, 1, 2]],
   charge: 0, chargePool: 0, canHold: false, ended: false, bill: 0, muted: false,
@@ -216,7 +223,7 @@ export function parseSave(raw: string | null): State | null {
     const input = JSON.parse(raw);
     if (![1, 2, 3, 4, 5].includes(input.version)) return null;
     if (input.version === 1) Object.assign(input, { version: 2, turns: input.spins, deliveries: 0, workEarned: 0, job: null, loan: null, ending: '', cascadeUnlocked: false, chargePool: input.charge * input.bet });
-    if (input.version === 2) Object.assign(input, { version: 3, day: 1, minutes: 0, pityLosses: 0, familyDebt: 75000000, story: { intro: 0, guide: input.deliveries > 0 ? 1 : 0, view: 'room', read: [], finale: null } });
+    if (input.version === 2) Object.assign(input, { version: 3, day: 1, minutes: 0, pityLosses: 0, familyDebt: 75000000, story: { intro: 0, guide: input.deliveries > 0 ? 1 : 0, view: 'room', read: [], finale: null, flags: [], fired: [], threads: {}, pending: [] } });
     if (input.version === 3) {
       input.version = 4; input.day = 1; input.minutes = 0; input.pityLosses = 0;
       input.upgrades = {...input.upgrades, stamina: 0, efficient: 0};
@@ -247,9 +254,59 @@ export function parseSave(raw: string | null): State | null {
     const story = s.story;
     if (!story || !Number.isInteger(story.intro) || story.intro < 0 || story.intro > 4 || !Number.isInteger(story.guide) || story.guide < 0 || story.guide > 3 || !['room','game','phone'].includes(story.view) || !Array.isArray(story.read) || story.read.some(id => typeof id !== 'string' || id.length > 40)) return null;
     if (story.finale !== null && (!story.finale || !Number.isInteger(story.finale.roll) || story.finale.roll < 0 || story.finale.roll > 99 || !Number.isInteger(story.finale.revealed) || story.finale.revealed < 0 || story.finale.revealed > 3 || (story.finale.revealed === 3) !== s.ended)) return null;
+    if (story.flags === undefined) story.flags = [];
+    else if (!Array.isArray(story.flags) || story.flags.some(id => typeof id !== 'string')) return null;
+    if (story.fired === undefined) story.fired = [];
+    else if (!Array.isArray(story.fired) || story.fired.some(id => typeof id !== 'string')) return null;
+    if (story.pending === undefined) story.pending = [];
+    else if (!Array.isArray(story.pending) || story.pending.some(id => typeof id !== 'string')) return null;
+    if (story.threads === undefined) story.threads = {};
+    else if (!story.threads || typeof story.threads !== 'object' || Array.isArray(story.threads)) return null;
+    else for (const t of Object.values(story.threads)) { if (!t || typeof t !== 'object' || !Number.isSafeInteger(t.cursor) || t.cursor < 0) return null; }
     if (!Array.isArray(s.logs) || s.logs.some(l => !l || typeof l.text !== 'string' || !['info', 'win', 'loss'].includes(l.kind))) return null;
     s.logs = s.logs.slice(0, 16).map(l => ({ ...l, text: l.text.slice(0, 200) })); return s;
   } catch { return null; }
+}
+
+export function wrapState(state: State, settings?: SaveSettings): SaveBank {
+  return { version: 6, activeSlot: 0, slots: [state, null, null], settings: settings ?? { muted: state.muted, reducedMotion: false } };
+}
+export function parseBank(raw: string | null): SaveBank | null {
+  if (!raw) return null;
+  try {
+    const input = JSON.parse(raw) as { version?: unknown; activeSlot?: unknown; slots?: unknown; settings?: { muted?: unknown; reducedMotion?: unknown } };
+    if (input?.version === 6) {
+      if (![0, 1, 2].includes(input.activeSlot as number)) return null;
+      const settings = input.settings;
+      if (!settings || typeof settings.muted !== 'boolean' || typeof settings.reducedMotion !== 'boolean') return null;
+      if (!Array.isArray(input.slots) || input.slots.length !== 3) return null;
+      const slots: [State | null, State | null, State | null] = [null, null, null];
+      for (let i = 0; i < 3; i++) {
+        const slot = input.slots[i];
+        if (slot === null) continue;
+        const parsed = parseSave(JSON.stringify(slot));
+        if (!parsed) return null;
+        parsed.muted = settings.muted;
+        slots[i] = parsed;
+      }
+      return { version: 6, activeSlot: input.activeSlot as SlotIndex, slots, settings: { muted: settings.muted, reducedMotion: settings.reducedMotion } };
+    }
+    const state = parseSave(raw);
+    return state ? wrapState(state) : null;
+  } catch { return null; }
+}
+export function queueEvents(state: State, table: readonly EventRow[]): void {
+  const seen = new Set([...state.story.fired, ...state.story.pending]);
+  for (const row of table) {
+    if (seen.has(row.id)) continue;
+    state.story.pending.push(row.id);
+    seen.add(row.id);
+  }
+}
+export function markFired(state: State, id: string): void {
+  const i = state.story.pending.indexOf(id);
+  if (i !== -1) state.story.pending.splice(i, 1);
+  if (!state.story.fired.includes(id)) state.story.fired.push(id);
 }
 
 export const FINALE_COST = 10000;

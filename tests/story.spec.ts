@@ -1,11 +1,17 @@
 import {finishRide} from './ride-helper';
 import {test,expect,type Page} from '@playwright/test';
-import {fresh,SAVE_KEY,type State} from '../src/engine';
+import {fresh,parseBank,SAVE_KEY,type State} from '../src/engine';
 async function load(page:Page,s?:State|object){
   if(s)await page.addInitScript(({s,key})=>{if(!sessionStorage.getItem('story-seeded')){localStorage.setItem(key,JSON.stringify(s));sessionStorage.setItem('story-seeded','1');}},{s,key:SAVE_KEY});
   await page.goto('/');await expect(page.locator('#story-layer')).toBeVisible();
 }
-async function read(page:Page):Promise<State>{return page.evaluate(key=>JSON.parse(localStorage.getItem(key)!),SAVE_KEY);}
+async function read(page:Page):Promise<State>{
+  const raw=await page.evaluate(key=>localStorage.getItem(key),SAVE_KEY);
+  const bank=parseBank(raw);
+  const active=bank?.slots[bank.activeSlot];
+  if(!active)throw new Error('expected an active save slot');
+  return active;
+}
 const candidate=()=>{const s=fresh();s.story.intro=4;s.story.guide=3;s.story.view='phone';s.spins=100;s.totalWon=150000;s.cascadeUnlocked=true;s.cash=45000;return s;};
 test('opening is a resumable illustrated prologue; slots are not the first screen',async({page})=>{
  await load(page);await expect(page.locator('.comic-caption')).toContainText('Bima');await expect(page.locator('#spin')).not.toBeVisible();

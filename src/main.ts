@@ -6,7 +6,7 @@ import '@fontsource/barlow/900.css';
 import '@fontsource/barlow-condensed/800.css';
 import '@fontsource/barlow-condensed/900.css';
 import './style.css';
-import { fresh, spin, cost, multiplier, upgradeCost, buyUpgrade, payBill, endRun, prestige, insightEarned, parseSave, SAVE_KEY, SYMBOLS, UPGRADES, machineRequirement, type State, type Upgrade, tier, feeRate, baseCost, minimumCost, totalDebt, loanDue, blocked as engineBlocked, nextBill, unlockMachine, LOAN_AMOUNTS, quoteLoan, borrow, repayLoan, jobQuote, startJob, jobStep, remainingTime, spinMinutes, jobMinutes, canWork, endDay, dailyObligations, clockTime, finaleReady, beginFinale, revealFinale, FINALE_COST } from './engine';
+import { fresh, spin, cost, multiplier, upgradeCost, buyUpgrade, payBill, endRun, prestige, insightEarned, parseBank, wrapState, SAVE_KEY, SYMBOLS, UPGRADES, machineRequirement, type State, type SaveBank, type Upgrade, tier, feeRate, baseCost, minimumCost, totalDebt, loanDue, blocked as engineBlocked, nextBill, unlockMachine, LOAN_AMOUNTS, quoteLoan, borrow, repayLoan, jobQuote, startJob, jobStep, remainingTime, spinMinutes, jobMinutes, canWork, endDay, dailyObligations, clockTime, finaleReady, beginFinale, revealFinale, FINALE_COST } from './engine';
 import { createReels, type ReelScene } from './reels';
 import { GameAudio } from './audio';
 import { StoryDirector } from './story';
@@ -21,7 +21,19 @@ const money = (n: number) => 'Rp' + Math.round(n).toLocaleString('id-ID');
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 let state: State;
-try { state = parseSave(localStorage.getItem(SAVE_KEY)) ?? fresh(); } catch { state = fresh(); }
+let bank: SaveBank;
+try {
+  const loaded = parseBank(localStorage.getItem(SAVE_KEY));
+  if (loaded) {
+    bank = loaded;
+    state = bank.slots[bank.activeSlot] ?? fresh();
+    if (!bank.slots[bank.activeSlot]) bank.slots[bank.activeSlot] = state;
+    state.muted = bank.settings.muted;
+  } else {
+    state = fresh();
+    bank = wrapState(state);
+  }
+} catch { state = fresh(); bank = wrapState(state); }
 let busy = false, auto = false, held: number | null = null, scene: ReelScene | undefined;
 let autoTimer: ReturnType<typeof setTimeout> | undefined;
 const audio = new GameAudio(); audio.muted = state.muted;
@@ -91,7 +103,12 @@ $('app').innerHTML = `
 `;
 
 function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); storageFailed = false; }
+  try {
+    bank.settings.muted = state.muted;
+    bank.slots[bank.activeSlot] = state;
+    localStorage.setItem(SAVE_KEY, JSON.stringify(bank));
+    storageFailed = false;
+  }
   catch { storageFailed = true; }
   $('save-status').innerHTML = storageFailed ? 'Save tidak tersedia' : '<i></i> Tersimpan lokal';
 }
@@ -281,7 +298,10 @@ document.addEventListener('click', e => {
     case 'end': endRun(state); save(); render(); showEnding(); break;
     case 'unlock': { const m = Number(b.dataset.machine) as 1 | 2; if (unlockMachine(state, m)) { closeModal(); setMachine(m); audio.play('buy'); save(); render(); checkAfterSpin(); } break; }
     case 'rebirth': case 'reset':
-      if (busy) break; stopAuto(); state = b.dataset.action === 'reset' ? fresh() : prestige(state); audio.muted = state.muted; held = null;
+      if (busy) break; stopAuto();
+      if (b.dataset.action === 'reset') { state = fresh(); bank = wrapState(state); }
+      else state = prestige(state);
+      audio.muted = state.muted; held = null;
       scene?.display(state.grid); scene?.setMode(0); closeModal(); save(); render(); selectTab('machine');
       $('result').classList.remove('winning'); $('result').innerHTML = '<strong>NASIB BARU. MIMPI LAMA.</strong><span>Satu putaran lagi?</span>'; story?.render(); break;
   }

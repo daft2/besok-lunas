@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fresh as newRun, spin, evaluate, cost, buyUpgrade, upgradeCost, unlockSultan, payBill, endRun, prestige, parseSave, insightEarned, type Grid, advanceTime, quoteLoan, borrow, repayLoan, loanDue, startJob, jobStep, cascade, tier, minimumCost, baseCost, unlockMachine, beginFinale, revealFinale, finaleReady, totalDebt, endDay, remainingTime, jobMinutes, spinMinutes, dayCapacity, canWork, moveLane, makeRoad, jobReward, ROAD_LENGTH, jobQuote } from '../src/engine';
+import { fresh as newRun, spin, evaluate, cost, buyUpgrade, upgradeCost, unlockSultan, payBill, endRun, prestige, parseSave, parseBank, queueEvents, markFired, insightEarned, type Grid, type SaveBank, advanceTime, quoteLoan, borrow, repayLoan, loanDue, startJob, jobStep, cascade, tier, minimumCost, baseCost, unlockMachine, beginFinale, revealFinale, finaleReady, totalDebt, endDay, remainingTime, jobMinutes, spinMinutes, dayCapacity, canWork, moveLane, makeRoad, jobReward, ROAD_LENGTH, jobQuote } from '../src/engine';
 
 const fresh = (insight = 0, runs = 1) => { const s = newRun(insight, runs); s.cash = 45000 + insight * 5000; return s; };
 
@@ -268,4 +268,57 @@ test('v4 saves preserve owned upgrades and current road while adding new branch 
  const restored=parseSave(JSON.stringify(old))!;assert.equal(restored.version,5);assert.equal(restored.upgrades.hold,1);
  assert.equal(restored.cascadeUnlocked,true);assert.equal(restored.job!.damage,600);assert.equal(restored.upgrades.fare,0);
  assert.deepEqual(restored.job!.rows,s.job!.rows);assert.equal(restored.cash,s.cash);
+});
+
+test('v5 raw state becomes a bank with slot 0 filled', () => {
+  const s = fresh();
+  const raw = JSON.parse(JSON.stringify(s)) as Record<string, unknown> & { story: Record<string, unknown> };
+  raw.version = 5;
+  delete raw.story.flags; delete raw.story.fired; delete raw.story.threads; delete raw.story.pending;
+  const payload = JSON.stringify(raw);
+  const migrated = parseSave(payload)!;
+  assert.equal(migrated.version, 5);
+  assert.deepEqual(migrated.story.flags, []);
+  assert.deepEqual(migrated.story.fired, []);
+  assert.deepEqual(migrated.story.pending, []);
+  assert.deepEqual(migrated.story.threads, {});
+  const bank = parseBank(payload)!;
+  assert.equal(bank.version, 6);
+  assert.equal(bank.activeSlot, 0);
+  assert.equal(bank.slots[0]!.cash, s.cash);
+  assert.deepEqual(bank.slots[0]!.story.flags, []);
+  assert.equal(bank.slots[1], null);
+  assert.equal(bank.slots[2], null);
+  assert.equal(bank.settings.muted, s.muted);
+  assert.equal(bank.settings.reducedMotion, false);
+  assert.equal(parseSave(JSON.stringify(bank)), null);
+});
+
+test('three slots store independent cash', () => {
+  const a = fresh(); a.cash = 1000;
+  const b = fresh(); b.cash = 22000;
+  const c = fresh(); c.cash = 333000;
+  const stored: SaveBank = { version: 6, activeSlot: 1, slots: [a, b, c], settings: { muted: true, reducedMotion: false } };
+  const bank = parseBank(JSON.stringify(stored))!;
+  assert.equal(bank.activeSlot, 1);
+  assert.equal(bank.slots[0]!.cash, 1000);
+  assert.equal(bank.slots[1]!.cash, 22000);
+  assert.equal(bank.slots[2]!.cash, 333000);
+  assert.equal(bank.slots[0]!.muted, true);
+  assert.equal(bank.slots[1]!.muted, true);
+  assert.equal(bank.settings.muted, true);
+});
+
+test('queueEvents is idempotent for the same id', () => {
+  const s = fresh();
+  const table = [{ id: 'kos-due' }, { id: 'pinjol-due' }, { id: 'kos-due' }];
+  queueEvents(s, table);
+  queueEvents(s, table);
+  assert.deepEqual(s.story.pending, ['kos-due', 'pinjol-due']);
+  markFired(s, 'kos-due');
+  assert.deepEqual(s.story.pending, ['pinjol-due']);
+  assert.deepEqual(s.story.fired, ['kos-due']);
+  queueEvents(s, table);
+  assert.deepEqual(s.story.pending, ['pinjol-due']);
+  assert.deepEqual(s.story.fired, ['kos-due']);
 });

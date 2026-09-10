@@ -1,6 +1,6 @@
 import {finishRide} from './ride-helper';
 import { test, expect, type Page } from '@playwright/test';
-import { fresh as newRun, SAVE_KEY, type State } from '../src/engine';
+import { fresh as newRun, parseBank, SAVE_KEY, type State } from '../src/engine';
 const fresh = (insight = 0) => { const s = newRun(insight); s.cash = 45000 + insight * 5000; return s; };
 async function start(page: Page, state: State = fresh()) {
   state.story.intro = 4; state.story.guide = 3; state.story.view = 'game';
@@ -13,7 +13,13 @@ async function tab(page: Page, name: string) {
   else if(name==='workshop')await page.locator('#turbo-indicator').click();
   else if(name==='machine' && await page.locator('body').getAttribute('data-panel')==='workshop'){await page.locator('#back-room').click();await page.locator('.phone-object').click();await page.locator('[data-story=judol]').click();}
 }
-async function saved(page: Page): Promise<State> { return page.evaluate(key => JSON.parse(localStorage.getItem(key)!), SAVE_KEY); }
+async function saved(page: Page): Promise<State> {
+  const raw = await page.evaluate(key => localStorage.getItem(key), SAVE_KEY);
+  const bank = parseBank(raw);
+  const active = bank?.slots[bank.activeSlot];
+  if (!active) throw new Error('expected an active save slot');
+  return active;
+}
 
 test('renders assets, runs a spin, persists its outcome and has no viewport overflow', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
