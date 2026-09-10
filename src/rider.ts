@@ -19,10 +19,12 @@ export class RiderGame {
     document.addEventListener('keydown',this.key);document.addEventListener('visibilitychange',this.visibility);
     this.setPause(true);this.update();this.frame=requestAnimationFrame(this.tick);
   }
-  private click=(e:Event)=>{const b=(e.target as HTMLElement).closest<HTMLButtonElement>('button');if(!b)return;if(b.dataset.lane!==undefined)this.lane(Number(b.dataset.lane));if(b.id==='ride-go')this.setPause(false);if(b.id==='ride-pause')this.setPause(!this.paused);};
-  private key=(e:KeyboardEvent)=>{if(e.repeat||this.dead)return;const k=e.key.toLowerCase(),j=this.state().job;if(!j)return;if(['arrowleft','a','arrowright','d'].includes(k)){e.preventDefault();this.lane(Math.max(0,Math.min(2,j.lane+(['a','arrowleft'].includes(k)?-1:1))));}if(k==='p'){e.preventDefault();this.setPause(!this.paused);}};
-  private pointerStart=(e:PointerEvent)=>{this.touchX=e.clientX;this.touchY=e.clientY;this.canvas.setPointerCapture(e.pointerId);};
-  private pointerEnd=(e:PointerEvent)=>{const dx=e.clientX-this.touchX,dy=e.clientY-this.touchY,j=this.state().job;if(!j)return;
+  pause(){if(!this.dead)this.setPause(true);}
+  private live(){return !this.dead && document.body.dataset.shell==='playing';}
+  private click=(e:Event)=>{if(!this.live())return;const b=(e.target as HTMLElement).closest<HTMLButtonElement>('button');if(!b)return;if(b.dataset.lane!==undefined)this.lane(Number(b.dataset.lane));if(b.id==='ride-go')this.setPause(false);if(b.id==='ride-pause')this.setPause(!this.paused);};
+  private key=(e:KeyboardEvent)=>{if(e.repeat||!this.live())return;const k=e.key.toLowerCase(),j=this.state().job;if(!j)return;if(['arrowleft','a','arrowright','d'].includes(k)){e.preventDefault();this.lane(Math.max(0,Math.min(2,j.lane+(['a','arrowleft'].includes(k)?-1:1))));}if(k==='p'){e.preventDefault();this.setPause(!this.paused);}};
+  private pointerStart=(e:PointerEvent)=>{if(!this.live())return;this.touchX=e.clientX;this.touchY=e.clientY;this.canvas.setPointerCapture(e.pointerId);};
+  private pointerEnd=(e:PointerEvent)=>{if(!this.live())return;const dx=e.clientX-this.touchX,dy=e.clientY-this.touchY,j=this.state().job;if(!j)return;
     if(Math.abs(dx)>20&&Math.abs(dx)>Math.abs(dy))this.lane(Math.max(0,Math.min(2,j.lane+(dx>0?1:-1))));
     else if(Math.abs(dx)<=20&&Math.abs(dy)<=20){const rect=this.canvas.getBoundingClientRect(),x=(e.clientX-rect.left)/rect.width*420;this.lane(Math.max(0,Math.min(2,Math.floor((x-54)/104))));}
   };
@@ -37,7 +39,7 @@ export class RiderGame {
     this.host.querySelectorAll<HTMLButtonElement>('[data-lane]').forEach(b=>{b.classList.toggle('selected',Number(b.dataset.lane)===j.lane);b.setAttribute('aria-pressed',String(Number(b.dataset.lane)===j.lane));});
   }
   private burst(hit:boolean,lane:number){this.flash=hit&&document.documentElement.dataset.reducedMotion!=='true'?1:0;for(let i=0;i<18;i++){const a=i*Math.PI*2/18;this.particles.push({x:106+lane*104,y:493,vx:Math.cos(a)*75,vy:Math.sin(a)*75-45,life:1,color:hit?(i%2?'#ff9362':'#ffe4a3'):(i%2?'#fbd569':'#baff8e')});}this.host.querySelector('#ride-feedback')!.classList.toggle('is-hit',hit);}
-  private tick=(time:number)=>{if(this.dead)return;const dt=this.last?Math.min(100,time-this.last):0;this.last=time;
+  private tick=(time:number)=>{if(this.dead)return;const raw=this.last?time-this.last:0;const dt=raw>0?Math.min(100,raw):0;this.last=time;
     if(!this.paused){this.elapsed+=dt;this.travel+=dt*.12;const j=this.state().job;this.waveMs=j&&j.step<2?3000:1800;
       if(j&&this.elapsed>=this.waveMs){this.elapsed=0;const hits=j.hits,orders=j.orders,before=jobReward(j);jobStep(this.state());this.save();const delta=jobReward(j)-before;
         this.feedback=j.hits>hits?`Aduh! Perbaikan −Rp${Math.abs(delta).toLocaleString('id-ID')}.`:j.orders>orders?`Order masuk! +Rp${delta.toLocaleString('id-ID')}.`:'Lajur aman. Tetap fokus.';

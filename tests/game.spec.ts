@@ -158,3 +158,148 @@ test('road taps select a lane and pause exposes the correct action',async({page,
  await page.locator('#ride-pause').click();await expect(page.locator('#ride-overlay')).toBeVisible();
  await expect(page.locator('#ride-pause')).toHaveAttribute('aria-label','Lanjut perjalanan');
 });
+
+test('guided ride teaches the first two sections then credits one shift', async ({ page }) => {
+  await start(page, newRun());
+  await page.locator('[data-action=work]').click();
+  await page.locator('[data-action=start-job]').click();
+  await expect(page.locator('#ride-feedback')).toContainText('Tas di tengah');
+  await expect(page.locator('#ride-overlay')).toBeVisible();
+  await page.clock.install();
+  await page.locator('#ride-go').click();
+  await page.clock.runFor(3300);
+  expect((await saved(page)).job?.step).toBe(1);
+  await expect(page.locator('#ride-feedback')).toContainText('Pembatas di tengah');
+  await page.clock.runFor(25000);
+  await expect(page.locator('[data-action=ride-done]')).toBeVisible();
+  await page.locator('[data-action=ride-done]').click();
+  const after = await saved(page);
+  expect(after.cash).toBeGreaterThanOrEqual(1000);
+  expect(after.deliveries).toBe(1);
+  expect(after.job).toBeNull();
+});
+
+test('system menu stacks over a ride without resuming or stealing lanes', async ({ page }) => {
+  await start(page, newRun());
+  await page.locator('[data-action=work]').click();
+  await page.locator('[data-action=start-job]').click();
+  await expect(page.locator('#ride-overlay')).toBeVisible();
+  await page.locator('.smartphone [data-story=system]').click();
+  await expect(page.locator('#menu-resume')).toBeVisible();
+  await expect(page.locator('#ride-overlay')).toBeVisible();
+  await page.locator('#menu-resume').click();
+  await expect(page.locator('#shell-menu')).toBeHidden();
+  await expect(page.locator('#ride-overlay')).toBeVisible();
+  await page.clock.install();
+  await page.locator('#ride-go').click();
+  await page.clock.runFor(3300);
+  expect((await saved(page)).job?.step).toBe(1);
+  const lane = (await saved(page)).job?.lane;
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#menu-resume')).toBeVisible();
+  await expect(page.locator('#ride-overlay')).toBeVisible();
+  await page.keyboard.press('ArrowRight');
+  expect((await saved(page)).job?.lane).toBe(lane);
+  await page.clock.runFor(4000);
+  expect((await saved(page)).job?.step).toBe(1);
+  await page.locator('#menu-resume').click();
+  await expect(page.locator('#shell-menu')).toBeHidden();
+  await expect(page.locator('#ride-overlay')).toBeVisible();
+  await page.clock.runFor(4000);
+  expect((await saved(page)).job?.step).toBe(1);
+  await page.locator('#ride-go').click();
+  await page.locator('[data-lane="0"]').click();
+  expect((await saved(page)).job?.lane).toBe(0);
+});
+
+test('first spin guide keeps PUTAR in view and restores the label', async ({ page }) => {
+  const state = fresh();
+  state.story.intro = 4;
+  state.story.guide = 2;
+  state.story.view = 'phone';
+  await page.addInitScript(({ key, value }) => {
+    if (!sessionStorage.getItem('seeded')) {
+      localStorage.setItem(key, value);
+      sessionStorage.setItem('seeded', 'yes');
+    }
+  }, { key: SAVE_KEY, value: JSON.stringify(state) });
+  await page.goto('/');
+  await resume(page);
+  await expect(page.locator('#loading')).toBeHidden();
+  await page.locator('[data-story=judol]').click();
+  await expect(page.locator('#loading')).toBeHidden();
+  await expect(page.locator('#first-spin-tip')).toBeVisible();
+  await expect(page.locator('#spin')).toHaveClass(/guide-target/);
+  await expect(page.locator('#spin')).toBeEnabled();
+  await expect.poll(async () => page.locator('#spin').evaluate(el => {
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= innerHeight && r.width > 0;
+  })).toBe(true);
+  await page.locator('#spin').click();
+  await expect(page.locator('#spin-label')).toHaveText('PUTAR');
+  expect((await saved(page)).spins).toBe(1);
+});
+
+test('room, phone, and game cash match after one shift', async ({ page }) => {
+  await start(page, newRun());
+  await page.locator('[data-action=work]').click();
+  await page.clock.install();
+  await page.locator('[data-action=start-job]').click();
+  await page.locator('#ride-go').click();
+  await page.clock.runFor(27000);
+  await expect(page.locator('[data-action=ride-done]')).toBeVisible();
+  await page.locator('[data-action=ride-done]').click();
+  const phone = await page.locator('.phone-balance b').innerText();
+  expect(phone).toMatch(/^Rp\d/);
+  await page.locator('.phone-close').click();
+  const room = await page.locator('.world-wallet b').innerText();
+  expect(room).toBe(phone);
+  await page.locator('.phone-object').click();
+  await page.locator('[data-story=judol]').click();
+  await expect(page.locator('#cash')).toHaveText(phone);
+});
+
+test('review screenshots for first-spin guide, paused ride, and mobile room', async ({ page }, info) => {
+  if (info.project.name !== 'desktop') return;
+  const guide = fresh();
+  guide.story.intro = 4;
+  guide.story.guide = 2;
+  guide.story.view = 'phone';
+  await page.addInitScript(({ key, value }) => { localStorage.setItem(key, value); }, { key: SAVE_KEY, value: JSON.stringify(guide) });
+  await page.goto('/');
+  await resume(page);
+  await page.locator('[data-story=judol]').click();
+  await expect(page.locator('#loading')).toBeHidden();
+  await expect(page.locator('#first-spin-tip')).toBeVisible();
+  await expect(page.locator('#system-open')).toBeVisible();
+  await expect(page.locator('.prototype')).toHaveCount(0);
+  await page.screenshot({ path: 'docs/review/BL-5-review-guide.png' });
+
+  const pausePage = await page.context().newPage();
+  const ride = newRun();
+  ride.story.intro = 4;
+  ride.story.guide = 3;
+  ride.story.view = 'game';
+  await pausePage.addInitScript(({ key, value }) => { localStorage.setItem(key, value); }, { key: SAVE_KEY, value: JSON.stringify(ride) });
+  await pausePage.goto('/');
+  await pausePage.locator('#menu-continue').click();
+  await pausePage.locator('[data-action=work]').click();
+  await pausePage.locator('[data-action=start-job]').click();
+  await pausePage.clock.install();
+  await pausePage.locator('#ride-go').click();
+  await pausePage.clock.runFor(3300);
+  await pausePage.locator('#ride-pause').click();
+  await pausePage.locator('.smartphone [data-story=system]').click();
+  await expect(pausePage.locator('#menu-resume')).toBeVisible();
+  await pausePage.locator('#menu-resume').click();
+  await expect(pausePage.locator('#shell-menu')).toBeHidden();
+  await expect(pausePage.locator('#ride-overlay')).toBeVisible();
+  await pausePage.screenshot({ path: 'docs/review/BL-5-review-pause.png' });
+  await pausePage.close();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#back-room').click();
+  await expect(page.locator('.room-stage')).toBeVisible();
+  await expect(page.locator('[data-story=system]')).toBeVisible();
+  await page.screenshot({ path: 'docs/review/BL-5-review-mobile.png' });
+});

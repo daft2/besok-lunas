@@ -44,7 +44,6 @@ export interface ShellHooks {
   leavePlay: () => void;
   lockedModal: () => boolean;
   openModal: () => boolean;
-  rideOverlayOpen: () => boolean;
   pauseRide: () => void;
   notice: (text: string) => void;
 }
@@ -110,7 +109,6 @@ export class GameShell {
     if (this.phase === 'playing') {
       if (this.hooks.lockedModal()) return true;
       if (this.hooks.openModal()) return false;
-      if (this.hooks.rideOverlayOpen()) return true;
       this.openSystem();
       return true;
     }
@@ -120,7 +118,6 @@ export class GameShell {
   openSystem() {
     if (this.phase !== 'playing') return;
     if (this.hooks.lockedModal()) return;
-    if (this.hooks.rideOverlayOpen()) return;
     this.hooks.pauseRide();
     this.phase = 'system';
     this.paint();
@@ -213,6 +210,7 @@ export class GameShell {
     const bank = this.hooks.bank();
     const slot = bank.slots[index];
     if (!slot) return;
+    this.hooks.leavePlay();
     bank.activeSlot = index;
     if (slot.story.view === 'menu') slot.story.view = 'room';
     slot.muted = bank.settings.muted;

@@ -61,19 +61,22 @@ export class ReelScene extends Phaser.Scene {
     this.icons.forEach(col => col.forEach(img => this.tweens.killTweensOf(img)));
     const first = result.cascades[0]?.grid ?? result.grid;
     const duration = this.reduce ? 160 : 650 * (1 - speed * .25);
+    const stagger = this.reduce ? 40 : 160;
+    const lastCol = [0, 1, 2].filter(x => x !== result.held).at(-1) ?? 0;
     return new Promise(resolve => {
       this.icons.forEach((col, x) => {
         if (x === result.held) return;
         this.rolling[x] = true; col.forEach(img => img.setAlpha(.78));
-        this.time.delayedCall(duration + x * (this.reduce ? 40 : 160), () => {
+        this.time.delayedCall(duration + x * stagger, () => {
           this.rolling[x] = false;
           col.forEach((img, y) => {
             img.setFrame(first[x][y]).setAlpha(1).setY(this.rowY(y) - (this.reduce ? 0 : 13));
             this.tweens.add({ targets: img, y: this.rowY(y), duration: this.reduce ? 0 : 180, ease: 'Back.easeOut' });
-          }); onStop();
+          });
+          if (x === lastCol) onStop();
         });
       });
-      this.time.delayedCall(duration + 510, async () => {
+      this.time.delayedCall(duration + lastCol * stagger, async () => {
         if (result.cascades.length) {
           for (let i = 0; i < result.cascades.length; i++) {
             const step = result.cascades[i]; this.display(step.grid); onCascade(step.factor);

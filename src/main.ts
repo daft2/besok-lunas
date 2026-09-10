@@ -18,7 +18,7 @@ let workshopBranch='all';
 import {dayBar, dayPlan} from './day';
 import {RiderGame} from './rider';
 
-const money = (n: number) => 'Rp' + Math.round(n).toLocaleString('id-ID');
+const money = (n: number) => 'Rp' + n.toLocaleString('id-ID');
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 let bank: SaveBank;
@@ -40,7 +40,7 @@ $('app').innerHTML = `
     <header class="topbar">
       <a class="wordmark" href="#" aria-label="Besok Lunas"><span>BESOK</span><strong>LUNAS<span class="wordmark-dot">!</span></strong></a>
       <div class="tagline">SEKALI LAGI,<br><b>PASTI BALIK.</b></div>
-      <div class="top-actions"><button id="system-open" data-shell="system" class="room-back">Menu</button><button id="back-room" class="room-back">← Kamar</button><button id="open-phone" class="room-back">Ponsel ▣</button><span class="prototype">CORE PLAYTEST <i>0.5</i></span><button id="sound" class="icon-button" aria-label="Nyalakan suara">♪</button><button id="help" class="icon-button" aria-label="Cara bermain">?</button></div>
+      <div class="top-actions"><button id="system-open" data-shell="system" class="room-back">Menu</button><button id="back-room" class="room-back">← Kamar</button><button id="open-phone" class="room-back">Ponsel ▣</button><button id="sound" class="icon-button" aria-label="Nyalakan suara">♪</button><button id="help" class="icon-button" aria-label="Cara bermain">?</button></div>
     </header>
     <section class="wallet-bar" aria-label="Keuangan">
       <div class="wallet-item balance"><span class="wallet-icon">Rp</span><div><small>SALDO DI TANGAN</small><strong id="cash"></strong></div></div>
@@ -346,14 +346,7 @@ shell = new GameShell({
   leavePlay,
   lockedModal: () => $<HTMLDialogElement>('modal').open && $<HTMLDialogElement>('modal').dataset.locked === 'true',
   openModal: () => $<HTMLDialogElement>('modal').open,
-  rideOverlayOpen: () => {
-    const overlay = document.getElementById('ride-overlay');
-    return !!overlay && !overlay.hidden;
-  },
-  pauseRide: () => {
-    const overlay = document.getElementById('ride-overlay');
-    if (overlay?.hidden) document.getElementById('ride-pause')?.click();
-  },
+  pauseRide: () => { rider?.pause(); },
   notice: toast,
 });
 story = new StoryDirector({ state: () => state, save, work: showWork, finance: showFinance,
