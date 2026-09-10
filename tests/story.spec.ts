@@ -41,7 +41,7 @@ test('guided phone, work, family message, phone app and first spin form one play
 test('phone messages and shop work independently; room keyboard cannot spin the hidden game',async({page})=>{
  const s=fresh();s.story.intro=4;s.story.guide=3;s.cash=20000;s.spins=60;
  await load(page,s);await page.keyboard.press('Space');expect((await read(page)).spins).toBe(60);
- await page.locator('.phone-object').click();await page.locator('[data-story=messages]').click();await expect(page.locator('.message-list>button')).toHaveCount(5);
+ await page.locator('.phone-object').click();await page.locator('[data-story=messages]').click();await expect(page.locator('.message-list>button')).toHaveCount(4);
  await page.locator('.phone-close').click();await expect(page.locator('.smartphone')).not.toBeVisible();
  await page.locator('.phone-object').click();await page.locator('[data-story=shop]').click();
  await page.locator('.smartphone [data-upgrade=payout]').click();expect((await read(page)).upgrades.payout).toBe(1);
@@ -101,4 +101,98 @@ test('tree branch filters preserve selection after purchase and show remaining b
  await tree.locator('[data-story=tree-filter][data-branch=all]').click();
  await expect(tree.locator('.tree-branch.general')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('Pesan lists Maya Ibu Doni and keeps Naya locked until 20 spins',async({page})=>{
+ const s=fresh();s.story.intro=4;s.story.guide=3;
+ await load(page,s);await page.locator('.phone-object').click();await page.locator('[data-story=messages]').click();
+ await expect(page.locator('[data-message=maya]')).toBeVisible();
+ await expect(page.locator('[data-message=ibu]')).toBeVisible();
+ await expect(page.locator('[data-message=doni]')).toBeVisible();
+ await expect(page.locator('[data-message=naya]')).toHaveCount(0);
+});
+
+test('Naya thread at 20 spins opens past the preview line',async({page})=>{
+ const s=fresh();s.story.intro=4;s.story.guide=3;s.spins=20;
+ await load(page,s);await page.locator('.phone-object').click();await page.locator('[data-story=messages]').click();
+ await expect(page.locator('[data-message=naya] small')).toHaveText('Ayah kapan pulang?');
+ await page.locator('[data-message=naya]').click();
+ await expect(page.locator('.message-bubble')).toContainText('gambar kita di rumah');
+ await expect(page.locator('.message-narration')).toContainText('PUTAR');
+});
+
+test('Maya later beat stacks under uang sekolah and returns the unread mark',async({page})=>{
+ const s=fresh();s.story.intro=4;s.story.guide=3;s.spins=60;s.story.read=['maya'];s.story.threads={maya:{cursor:0}};
+ await load(page,s);await page.locator('.phone-object').click();await page.locator('[data-story=messages]').click();
+ await expect(page.locator('[data-message=maya] em')).toBeVisible();
+ await page.locator('[data-message=maya]').click();
+ await expect(page.locator('.message-beat')).toHaveCount(2);
+ await expect(page.locator('.message-bubble').nth(0)).toContainText('uang sekolah');
+ await expect(page.locator('.message-bubble').nth(1)).toContainText('dari tadi online');
+ await expect(page.locator('.message-narration').nth(1)).toContainText('menaruh ponsel');
+ await page.locator('.phone-back').click();
+ await expect(page.locator('[data-message=maya] em')).toHaveCount(0);
+});
+
+test('Doni thread keeps the screenshot bait as narration under the bubble',async({page})=>{
+ const s=fresh();s.story.intro=4;s.story.guide=3;
+ await load(page,s);await page.locator('.phone-object').click();await page.locator('[data-story=messages]').click();
+ await page.locator('[data-message=doni]').click();
+ await expect(page.locator('.message-bubble')).toContainText('Baru cair');
+ await expect(page.locator('.message-narration')).toContainText('Tangkapan layar');
+});
+
+test('final thread lists at 100 spins without finaleReady',async({page})=>{
+ const s=fresh();s.story.intro=4;s.story.guide=3;s.spins=100;
+ await load(page,s);await page.locator('.phone-object').click();
+ await expect(page.locator('[data-story=finale] small')).toContainText('100/100 spin');
+ await page.locator('[data-story=messages]').click();
+ await expect(page.locator('[data-message=final]')).toBeVisible();
+ await page.locator('[data-message=final]').click();
+ await expect(page.locator('.message-bubble')).toContainText('100 spin');
+});
+
+test('Escape from phone opens the system menu and phone-close still puts it down',async({page})=>{
+ const s=fresh();s.story.intro=4;s.story.guide=3;
+ await load(page,s);await page.locator('.phone-object').click();
+ await page.keyboard.press('Escape');
+ await expect(page.locator('#menu-resume')).toBeVisible();
+ await page.locator('#menu-resume').click();
+ await expect(page.locator('.smartphone')).toBeVisible();
+ await page.locator('.phone-close').click();
+ await expect(page.locator('.smartphone')).not.toBeVisible();
+});
+
+test('review screenshots for Maya guide, stacked thread, and mobile',async({page},info)=>{
+ if(info.project.name==='desktop'){
+  await load(page);await page.locator('[data-story=skip]').click();await page.locator('.phone-object').click();
+  await page.locator('[data-story=work]').click();await page.locator('[data-action=start-job]').click();await finishRide(page);
+  await page.locator('[data-story=messages]').click();await page.locator('[data-message=maya]').click();
+  await expect(page.locator('.message-bubble')).toContainText('uang sekolah');
+  await expect(page.locator('.guide-callout')).toContainText('Judol');
+  await page.screenshot({path:'docs/review/BL-3-review-guide.png'});
+  await page.locator('.phone-cta').click();await expect(page.locator('[data-story=judol]')).toBeEnabled();
+  const s=fresh();s.story.intro=4;s.story.guide=3;s.spins=60;
+  const threadPage=await page.context().newPage();
+  await threadPage.addInitScript(({s,key})=>{localStorage.setItem(key,JSON.stringify(s));},{s,key:SAVE_KEY});
+  await threadPage.goto('/');await threadPage.locator('#menu-continue').click();
+  await threadPage.locator('.phone-object').click();await threadPage.locator('[data-story=messages]').click();
+  await threadPage.locator('[data-message=maya]').click();
+  await expect(threadPage.locator('.message-beat')).toHaveCount(2);
+  await expect(threadPage.locator('.message-bubble').nth(1)).toContainText('dari tadi online');
+  await threadPage.screenshot({path:'docs/review/BL-3-review-thread.png'});
+  await threadPage.close();
+ }
+ if(info.project.name==='mobile'){
+  const s=fresh();s.story.intro=4;s.story.guide=3;s.spins=60;
+  await load(page,s);await page.locator('.phone-object').click();await page.locator('[data-story=messages]').click();
+  await page.locator('[data-message=maya]').click();
+  await expect(page.locator('.phone-back')).toBeVisible();
+  await expect(page.locator('.message-beat')).toHaveCount(2);
+  await page.screenshot({path:'docs/review/BL-3-review-mobile.png'});
+  await page.locator('.message-beat').nth(1).scrollIntoViewIfNeeded();
+  await expect(page.locator('.message-beat').nth(1)).toBeInViewport();
+  await page.locator('.phone-back').scrollIntoViewIfNeeded();
+  await expect(page.locator('.phone-back')).toBeInViewport();
+ }
 });
