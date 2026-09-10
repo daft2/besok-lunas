@@ -148,6 +148,18 @@ test('Escape opens the system menu from the room unless a locked modal owns the 
   await expect(page.locator('#shell-menu')).toBeHidden();
 });
 
+test('Escape over help closes the modal and keeps playing', async ({ page }) => {
+  const state = filled(9000, 1);
+  state.story.view = 'game';
+  await seed(page, state);
+  await page.goto('/');
+  await page.locator('#menu-continue').click();
+  await page.locator('#help').click();
+  await page.keyboard.press('Escape');
+  expect(await page.locator('#modal').evaluate((el: HTMLDialogElement) => el.open)).toBe(false);
+  expect(await page.evaluate(() => document.body.dataset.shell)).toBe('playing');
+});
+
 test('review screenshots for title, slots, and mobile shell', async ({ page }, info) => {
   if (info.project.name === 'desktop') {
     await page.goto('/');

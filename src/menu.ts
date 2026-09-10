@@ -43,6 +43,7 @@ export interface ShellHooks {
   enterPlay: () => void;
   leavePlay: () => void;
   lockedModal: () => boolean;
+  openModal: () => boolean;
   rideOverlayOpen: () => boolean;
   pauseRide: () => void;
   notice: (text: string) => void;
@@ -107,7 +108,8 @@ export class GameShell {
       return true;
     }
     if (this.phase === 'playing') {
-      if (this.hooks.lockedModal()) return false;
+      if (this.hooks.lockedModal()) return true;
+      if (this.hooks.openModal()) return false;
       if (this.hooks.rideOverlayOpen()) return true;
       this.openSystem();
       return true;

@@ -345,6 +345,7 @@ shell = new GameShell({
   enterPlay,
   leavePlay,
   lockedModal: () => $<HTMLDialogElement>('modal').open && $<HTMLDialogElement>('modal').dataset.locked === 'true',
+  openModal: () => $<HTMLDialogElement>('modal').open,
   rideOverlayOpen: () => {
     const overlay = document.getElementById('ride-overlay');
     return !!overlay && !overlay.hidden;
