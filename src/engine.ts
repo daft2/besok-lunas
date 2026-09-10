@@ -1,3 +1,5 @@
+import { dueEvents, eventById, hasBlockingEvent } from './events';
+
 export type SymbolId = 0 | 1 | 2 | 3 | 4 | 5;
 export type Grid = SymbolId[][];
 export const SYMBOLS = [
@@ -32,20 +34,30 @@ export interface StoryState {
 export type SlotIndex = 0 | 1 | 2;
 export interface SaveSettings { muted: boolean; reducedMotion: boolean; }
 export interface SaveBank { version: 6; activeSlot: SlotIndex; slots: [State | null, State | null, State | null]; settings: SaveSettings; }
-export interface EventRow { id: string; }
+export interface EventRow {
+  id: string;
+  interrupt?: 'notify' | 'block';
+  flags?: string[];
+  once?: boolean;
+  thread?: string;
+  title?: string;
+  body?: string;
+  when?: (state: State) => boolean;
+}
 export interface State {
   version: 5; day: number; minutes: number; pityLosses: number; familyDebt: number; story: StoryState; cash: number; debt: number; spins: number; totalWon: number; bestWin: number;
   insight: number; runs: number; bet: number; machine: 0 | 1 | 2; sultanUnlocked: boolean; cascadeUnlocked: boolean;
   upgrades: Record<Upgrade, number>; grid: Grid; charge: number; chargePool: number;
   canHold: boolean; ended: boolean; bill: number; logs: Entry[]; muted: boolean;
   turns: number; deliveries: number; workEarned: number; job: Job | null; loan: Loan | null; ending: string;
+  winStreak: number;
 }
 export const fresh = (insight = 0, runs = 1): State => ({
   version: 5, day: 1, minutes: 0, pityLosses: 0, familyDebt: 75000000, story: { intro: 0, guide: 0, view: 'room', read: [], finale: null, flags: [], fired: [], threads: {}, pending: [] }, cash: insight * 5000, debt: 75000, spins: 0, totalWon: 0, bestWin: 0,
   insight, runs, bet: 1000, machine: 0, sultanUnlocked: false, cascadeUnlocked: false,
   upgrades: { payout: 0, hold: 0, turbo: 0, auto: 0, stamina: 0, efficient: 0, luck: 0, fare: 0, orders: 0, safety: 0 }, grid: [[1, 0, 3], [2, 5, 0], [4, 1, 2]],
   charge: 0, chargePool: 0, canHold: false, ended: false, bill: 0, muted: false,
-  turns: 0, deliveries: 0, workEarned: 0, job: null, loan: null, ending: '',
+  turns: 0, deliveries: 0, workEarned: 0, job: null, loan: null, ending: '', winStreak: 0,
   logs: [{ text: 'Saldo kosong. Narik ojol dulu buat modal. Utang kos Rp75.000.', kind: 'info' }],
 });
 export const tier = (s: State) => Math.min(10, Math.floor(s.turns / 40));
@@ -62,7 +74,7 @@ export const jobMinutes = (s: State) => 120 - s.upgrades.efficient * 30;
 export const clockTime = (s: State) => `${String(8 + Math.floor(s.minutes / 60)).padStart(2,'0')}:${String(s.minutes % 60).padStart(2,'0')}`;
 export const loanDue = (s: State) => !!s.loan && s.day >= s.loan.due;
 export const dailyObligations = (s: State) => s.bill + (loanDue(s) ? s.loan!.balance : 0);
-export const canWork = (s: State) => !s.ended && !s.story.finale && !s.job && remainingTime(s) >= jobMinutes(s);
+export const canWork = (s: State) => !s.ended && !s.story.finale && !s.job && remainingTime(s) >= jobMinutes(s) && !hasBlockingEvent(s);
 export function endDay(s: State): boolean {
   if (s.ended || s.job || s.story.finale) return false;
   const due = dailyObligations(s);
@@ -75,9 +87,10 @@ export function endDay(s: State): boolean {
   s.day++; s.minutes = 0; s.canHold = false;
   if (s.day % 3 === 0 && s.debt > 0) s.bill = Math.min(s.debt, 4000 + (Math.floor(s.day / 3) - 1) * 3000);
   log(s, `Hari ${s.day}. Waktu kembali tersedia. ${s.bill ? 'Cicilan kos harus dibayar sebelum tidur.' : 'Pilih bagaimana memakai harimu.'}`);
+  queueDueEvents(s);
   return true;
 }
-export const blocked = (s: State) => s.ended || !!s.bill || loanDue(s) || !!s.job || !!s.story.finale;
+export const blocked = (s: State) => s.ended || !!s.bill || loanDue(s) || !!s.job || !!s.story.finale || hasBlockingEvent(s);
 export const nextBill = (s: State) => Math.min(s.debt, 4000 + Math.floor(s.day / 3) * 3000);
 export const upgradeCost = (s: State, id: Upgrade) => Math.round(UPGRADES[id].base * 1.8 ** s.upgrades[id]);
 export const UPGRADE_PARENTS: Partial<Record<Upgrade, Upgrade[]>> = { efficient: ['stamina'], luck: ['efficient'], hold: ['payout'], turbo: ['payout'], auto: ['hold', 'turbo'], orders: ['fare'], safety: ['orders'] };
@@ -124,6 +137,7 @@ export function advanceTime(s: State, n: number) {
 }
 export interface SpinResult { grid: Grid; wins: LineWin[]; payout: number; bonus: number; paid: number; billDue: number; held: number | null; cascades: Cascade[]; }
 export function spin(s: State, held: number | null = null, rng = Math.random): SpinResult | null {
+  queueDueEvents(s);
   if (blocked(s) || remainingTime(s) < spinMinutes(s) || s.cash < cost(s)) return null;
   if (held !== null && (s.machine === 2 || !Number.isInteger(held) || held < 0 || held > 2 || !s.canHold || !s.upgrades.hold)) return null;
   const paid = cost(s); s.cash -= paid; s.minutes += spinMinutes(s);
@@ -141,7 +155,10 @@ export function spin(s: State, held: number | null = null, rng = Math.random): S
   const grid = cascades.length ? cascades[cascades.length - 1].grid : initial;
   s.cash += payout + bonus; s.totalWon += payout + bonus; s.bestWin = Math.max(s.bestWin, payout + bonus);
   s.grid = grid; s.spins++; s.canHold = held === null && s.machine !== 2; advanceTime(s, 1);
+  if (s.machine === 0 && payout) s.winStreak++;
+  else s.winStreak = 0;
   if (payout || bonus) log(s, `${cascades.length > 1 ? `Rantai ${cascades.length} tahap!` : wins.some(w => w.count === 3) ? 'Tiga serangkai!' : 'Dua cocok'} +Rp${(payout + bonus).toLocaleString('id-ID')}`, 'win');
+  queueDueEvents(s);
   return { grid, wins, payout, bonus, paid, billDue: s.bill, held, cascades };
 }
 export function buyUpgrade(s: State, id: Upgrade): boolean {
@@ -209,6 +226,7 @@ export function jobStep(s: State): boolean {
   if (j.step === ROAD_LENGTH) {
     const net = jobReward(j); s.cash += net; s.workEarned += net; s.deliveries++; s.job = null;
     log(s, `Order selesai. ${j.orders} bonus, ${j.hits} benturan. Bersih +Rp${net.toLocaleString('id-ID')}.`, 'win'); advanceTime(s, 4);
+    queueDueEvents(s);
   } return true;
 }
 export function endRun(s: State, reason = 'Kamu menyerah pada tagihan yang menumpuk.'): void { s.ended = true; s.ending = reason; s.canHold = false; s.job = null; log(s, reason, 'loss'); }
@@ -264,6 +282,8 @@ export function parseSave(raw: string | null): State | null {
     else if (!story.threads || typeof story.threads !== 'object' || Array.isArray(story.threads)) return null;
     else for (const t of Object.values(story.threads)) { if (!t || typeof t !== 'object' || !Number.isSafeInteger(t.cursor) || t.cursor < 0) return null; }
     if (!Array.isArray(s.logs) || s.logs.some(l => !l || typeof l.text !== 'string' || !['info', 'win', 'loss'].includes(l.kind))) return null;
+    if (s.winStreak === undefined) s.winStreak = 0;
+    else if (!Number.isSafeInteger(s.winStreak) || s.winStreak < 0) return null;
     s.logs = s.logs.slice(0, 16).map(l => ({ ...l, text: l.text.slice(0, 200) })); return s;
   } catch { return null; }
 }
@@ -305,12 +325,22 @@ export function queueEvents(state: State, table: readonly EventRow[]): void {
     if (seen.has(row.id)) continue;
     state.story.pending.push(row.id);
     seen.add(row.id);
+    for (const flag of row.flags ?? []) {
+      if (!state.story.flags.includes(flag)) state.story.flags.push(flag);
+    }
   }
 }
 export function markFired(state: State, id: string): void {
   const i = state.story.pending.indexOf(id);
   if (i !== -1) state.story.pending.splice(i, 1);
   if (!state.story.fired.includes(id)) state.story.fired.push(id);
+}
+export function queueDueEvents(s: State) {
+  queueEvents(s, dueEvents(s));
+  for (const id of [...s.story.pending]) {
+    const row = eventById(id);
+    if (row?.interrupt === 'block' && row.when && !row.when(s)) markFired(s, id);
+  }
 }
 
 export const FINALE_COST = 10000;

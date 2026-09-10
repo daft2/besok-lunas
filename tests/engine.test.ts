@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fresh as newRun, spin, evaluate, cost, buyUpgrade, upgradeCost, unlockSultan, payBill, endRun, prestige, parseSave, parseBank, queueEvents, markFired, insightEarned, motionReduced, type Grid, type SaveBank, advanceTime, quoteLoan, borrow, repayLoan, loanDue, startJob, jobStep, cascade, tier, minimumCost, baseCost, unlockMachine, beginFinale, revealFinale, finaleReady, totalDebt, endDay, remainingTime, jobMinutes, spinMinutes, dayCapacity, canWork, moveLane, makeRoad, jobReward, ROAD_LENGTH, jobQuote } from '../src/engine';
+import { fresh as newRun, spin, evaluate, cost, buyUpgrade, upgradeCost, unlockSultan, payBill, endRun, prestige, parseSave, parseBank, queueEvents, queueDueEvents, markFired, insightEarned, motionReduced, type Grid, type SaveBank, advanceTime, quoteLoan, borrow, repayLoan, loanDue, startJob, jobStep, cascade, tier, minimumCost, baseCost, unlockMachine, beginFinale, revealFinale, finaleReady, totalDebt, endDay, remainingTime, jobMinutes, spinMinutes, dayCapacity, canWork, moveLane, makeRoad, jobReward, ROAD_LENGTH, jobQuote } from '../src/engine';
+import { dueEvents, hasBlockingEvent, pendingBlock, pendingNotify } from '../src/events';
 
 const fresh = (insight = 0, runs = 1) => { const s = newRun(insight, runs); s.cash = 45000 + insight * 5000; return s; };
 
@@ -343,3 +344,124 @@ test('queueEvents is idempotent for the same id', () => {
   assert.deepEqual(s.story.pending, ['pinjol-due']);
   assert.deepEqual(s.story.fired, ['kos-due']);
 });
+
+test('endDay that spawns a kos bill queues a block once and leaves cash alone', () => {
+  const s = fresh();
+  const cash = s.cash;
+  endDay(s); endDay(s);
+  assert.equal(s.day, 3);
+  assert.equal(s.bill, 4000);
+  assert.equal(s.cash, cash);
+  assert.deepEqual(s.story.pending, ['kos-bill']);
+  assert.equal(pendingBlock(s)?.interrupt, 'block');
+  assert.equal(hasBlockingEvent(s), true);
+  const again = [...s.story.pending];
+  queueDueEvents(s);
+  assert.deepEqual(s.story.pending, again);
+});
+
+test('loan due day queues pinjol-due as a block', () => {
+  const s = fresh();
+  borrow(s, 10000);
+  endDay(s); endDay(s); endDay(s);
+  assert.equal(s.day, 4);
+  assert.equal(loanDue(s), true);
+  assert.deepEqual(s.story.pending, ['pinjol-due']);
+  assert.equal(pendingBlock(s)?.id, 'pinjol-due');
+});
+
+test('three completed shifts with Ibu unread queue a notify and write ibu-unanswered', () => {
+  const s = newRun();
+  s.cash = 20000;
+  for (let n = 0; n < 3; n++) {
+    assert.equal(startJob(s, () => .5), true);
+    for (let i = 0; i < ROAD_LENGTH; i++) {
+      const row = s.job!.rows[i];
+      moveLane(s, row.order ?? [0, 1, 2].find(l => !row.obstacles.includes(l))!);
+      jobStep(s);
+    }
+  }
+  assert.equal(s.deliveries, 3);
+  assert.ok(s.story.pending.includes('ibu-missed'));
+  assert.ok(s.story.flags.includes('ibu-unanswered'));
+  assert.equal(pendingNotify(s)?.interrupt, 'notify');
+  assert.equal(hasBlockingEvent(s), false);
+  const cash = s.cash, spins = s.spins, job = s.job, loan = s.loan;
+  queueDueEvents(s);
+  assert.equal(s.story.pending.filter(id => id === 'ibu-missed').length, 1);
+  assert.equal(s.cash, cash);
+  assert.equal(s.spins, spins);
+  assert.equal(s.job, job);
+  assert.equal(s.loan, loan);
+});
+
+test('three consecutive Receh wins queue doni-win and increment winStreak', () => {
+  const s = fresh();
+  for (let i = 0; i < 3; i++) assert.ok(spin(s, null, () => 0));
+  assert.equal(s.winStreak, 3);
+  assert.ok(s.story.pending.includes('doni-win'));
+  assert.ok(s.story.flags.includes('doni-streak'));
+  assert.ok(spin(s, null, () => 0));
+  assert.equal(s.story.pending.filter(id => id === 'doni-win').length, 1);
+});
+
+test('a losing Receh spin resets the streak before doni-win', () => {
+  const s = fresh();
+  assert.ok(spin(s, null, () => 0));
+  assert.ok(spin(s, null, () => 0));
+  let n = 0;
+  const lose = () => n < 9 ? [0, .4, .7][Math.floor(n++ / 3)] : .99;
+  assert.equal(spin(s, null, lose)!.payout, 0);
+  assert.equal(s.winStreak, 0);
+  assert.equal(s.story.pending.includes('doni-win'), false);
+});
+
+test('long Judol session and night clock queue Maya and Naya notifies', () => {
+  const s = fresh();
+  s.spins = 8; s.minutes = 160;
+  queueDueEvents(s);
+  assert.ok(s.story.pending.includes('maya-session'));
+  assert.ok(s.story.flags.includes('maya-session'));
+  s.minutes = 480;
+  queueDueEvents(s);
+  assert.ok(s.story.pending.includes('naya-night'));
+  assert.ok(s.story.flags.includes('naya-night'));
+});
+
+test('dueEvents never writes cash, spins, job, or loan', () => {
+  const s = fresh();
+  s.deliveries = 3; s.winStreak = 3; s.spins = 8; s.minutes = 480; s.bill = 4000;
+  const snapshot = { cash: s.cash, spins: s.spins, job: s.job, loan: s.loan };
+  dueEvents(s);
+  assert.equal(s.cash, snapshot.cash);
+  assert.equal(s.spins, snapshot.spins);
+  assert.equal(s.job, snapshot.job);
+  assert.equal(s.loan, snapshot.loan);
+  queueDueEvents(s);
+  assert.equal(s.cash, snapshot.cash);
+  assert.equal(s.spins, snapshot.spins);
+  assert.equal(s.job, snapshot.job);
+  assert.equal(s.loan, snapshot.loan);
+});
+
+test('parseSave fills missing winStreak without bumping the run version', () => {
+  const s = fresh();
+  const raw = JSON.parse(JSON.stringify(s)) as { version: number; winStreak?: number };
+  delete raw.winStreak;
+  const restored = parseSave(JSON.stringify(raw))!;
+  assert.equal(restored.version, 5);
+  assert.equal(restored.winStreak, 0);
+  assert.equal(parseSave(JSON.stringify({ ...s, winStreak: -1 })), null);
+});
+
+test('paying a kos bill drops the stale block on the next queue', () => {
+  const s = fresh();
+  endDay(s); endDay(s);
+  assert.ok(s.story.pending.includes('kos-bill'));
+  assert.equal(payBill(s), true);
+  queueDueEvents(s);
+  assert.equal(s.story.pending.includes('kos-bill'), false);
+  assert.ok(s.story.fired.includes('kos-bill'));
+  assert.equal(hasBlockingEvent(s), false);
+});
+

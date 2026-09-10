@@ -4,3 +4,16 @@ body[data-world]:not([data-world=game]) .game-shell,body[data-world]:not([data-w
 @media(prefers-reduced-motion:reduce){.room-object.guided:after,.comic-art,.comic-quote{animation:none}}
 html[data-reduced-motion=true] .room-object.guided:after,html[data-reduced-motion=true] .comic-art,html[data-reduced-motion=true] .comic-quote{animation:none}
 .first-spin-tip{border:2px solid #b7a374;background:#eddeb6;color:#42372a;border-radius:9px;padding:11px 13px;margin-bottom:12px}.first-spin-tip[hidden]{display:none}.first-spin-tip b{font-size:8px;letter-spacing:1px;display:block;margin-bottom:5px}.first-spin-tip span{font-size:11px;line-height:1.5;display:block}
+.event-scrim{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:#091822b3;backdrop-filter:blur(7px);padding:18px}
+.event-card{width:min(420px,100%);background:#f0e0b9;color:#393029;border:6px solid #131c22;border-radius:8px;box-shadow:9px 10px #0c1d2488;padding:28px 24px 22px}
+.event-kicker{display:block;font-size:8px;letter-spacing:2px;font-weight:800;color:#86633e}
+.event-card h2{font-family:'Barlow Condensed',Impact,sans-serif;font-size:36px;line-height:1.05;margin:10px 0 14px;color:#302721}
+.event-card p{font-size:15px;line-height:1.65;color:#64513d;margin:0 0 22px}
+.event-ack{width:100%;min-height:52px;background:#ffcf70;color:#32261c;border:3px solid #1a2523;border-radius:8px;box-shadow:0 4px #987740;font-size:14px;font-weight:900}
+.event-notice{position:absolute;left:6%;right:6%;bottom:8%;z-index:3;background:#fff0c7;color:#302721;border:3px solid #211d25;box-shadow:4px 5px #182029aa;padding:16px 18px;transform:rotate(-1deg)}
+.event-notice>span{display:block;font-family:'Barlow Condensed',Impact,sans-serif;font-size:22px;font-weight:800}
+.event-notice p{font-size:13px;line-height:1.55;margin:8px 0 12px;color:#64513d}
+.event-notice button{min-height:44px;width:100%;border:2px solid #1a2523;background:#ffcf70;color:#32261c;border-radius:7px;font-size:12px;font-weight:900}
+@media(max-width:760px){.event-card{padding:22px 18px 18px;border-width:4px}.event-card h2{font-size:30px}.event-card p{font-size:14px}.event-ack{min-height:56px}.event-notice{left:5%;right:5%;bottom:6%;padding:14px 14px}.event-notice>span{font-size:20px}}
+@media(prefers-reduced-motion:reduce){.event-notice{transform:none}}
+html[data-reduced-motion=true] .event-notice{transform:none}
