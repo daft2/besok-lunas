@@ -3,3 +3,5 @@ dist/
 test-results/
 .DS_Store
 .audit/
+# Local deploy config (server domain); stays on the server, not upstream.
+docker-compose.yml

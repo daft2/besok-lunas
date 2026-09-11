@@ -1,10 +1,10 @@
-import '@fontsource/barlow/400.css';
-import '@fontsource/barlow/600.css';
-import '@fontsource/barlow/700.css';
-import '@fontsource/barlow/800.css';
-import '@fontsource/barlow/900.css';
-import '@fontsource/barlow-condensed/800.css';
-import '@fontsource/barlow-condensed/900.css';
+import '@fontsource/barlow/latin-400.css';
+import '@fontsource/barlow/latin-600.css';
+import '@fontsource/barlow/latin-700.css';
+import '@fontsource/barlow/latin-800.css';
+import '@fontsource/barlow/latin-900.css';
+import '@fontsource/barlow-condensed/latin-800.css';
+import '@fontsource/barlow-condensed/latin-900.css';
 import './style.css';
 import { fresh, spin, cost, multiplier, upgradeCost, buyUpgrade, payBill, endRun, prestige, insightEarned, parseBank, wrapState, SAVE_KEY, SYMBOLS, UPGRADES, machineRequirement, machinePrice, type State, type SaveBank, type Upgrade, tier, feeRate, baseCost, minimumCost, totalDebt, loanDue, blocked as engineBlocked, nextBill, unlockMachine, LOAN_AMOUNTS, quoteLoan, borrow, repayLoan, jobQuote, startJob, jobStep, remainingTime, spinMinutes, jobMinutes, canWork, endDay, dailyObligations, clockTime, finaleReady, beginFinale, revealFinale, FINALE_COST } from './engine';
 import { GameShell, emptyBank, menuState, applyReducedMotion } from './menu';

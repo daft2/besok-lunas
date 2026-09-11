@@ -14,7 +14,7 @@ export class ReelScene extends Phaser.Scene {
   private iconSize() { return this.mode ? 104 : 175; }
   private get reduce() { return document.documentElement.dataset.reducedMotion === 'true'; }
   constructor(grid: Grid, ready: (s: ReelScene) => void) { super('Reels'); this.initial = grid; this.readyCallback = ready; }
-  preload() { this.load.image('symbols', '/assets/symbols-v2.png'); }
+  preload() { this.load.image('symbols', '/assets/symbols-v2.webp'); }
   create() {
     const texture = this.textures.get('symbols');
     const source = texture.getSourceImage() as HTMLImageElement;

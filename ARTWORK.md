@@ -5,10 +5,10 @@
 
 Created with the built-in image_gen tool. Final runtime files:
 
-- `public/assets/home-v05.png`: illustrated desk and phone home scene.
-- `public/assets/progression-atlas.png`: clock, clover, money, slot cabinet, helmet and toolbox; used in tree nodes and phone apps.
-- `public/assets/road-v05.png`: scrolling Indonesian neighborhood environment.
-- `public/assets/ojol-atlas.png`: delivery rider, car, angkot, barricade, bag and parcel. The generator returned a painted checkerboard instead of alpha in early attempts. The final revision uses white background; the game renders cropped sprites using multiply compositing onto the road. No transparency is claimed.
+- `public/assets/home-v05.webp`: illustrated desk and phone home scene.
+- `public/assets/progression-atlas.webp`: clock, clover, money, slot cabinet, helmet and toolbox; used in tree nodes and phone apps.
+- `public/assets/road-v05.webp`: scrolling Indonesian neighborhood environment.
+- `public/assets/ojol-atlas.webp`: delivery rider, car, angkot, barricade, bag and parcel. The generator returned a painted checkerboard instead of alpha in early attempts. The final revision uses white background; the game renders cropped sprites using multiply compositing onto the road. No transparency is claimed.
 
 ### Home desk
 
@@ -38,7 +38,7 @@ Use case: precise-object-edit. Input is edit target. Keep six drawings exactly a
 
 ## Phone orientation correction
 
-Final asset: `public/assets/prologue-v2.png`. Edited using the built-in image_gen tool, then inspected for correct inward-facing display and outward-facing phone back. The original atlas is retained for provenance.
+Final asset: `public/assets/prologue-v2.webp`. Edited using the built-in image_gen tool, then inspected for correct inward-facing display and outward-facing phone back. The original atlas is retained for provenance.
 
 Final prompt:
 
@@ -47,7 +47,7 @@ Edit target: the supplied four-panel comic atlas. Correct ONLY the smartphone in
 
 ## v0.3 story atlas
 
-`public/assets/prologue.png` — 1536×1024 four-panel comic atlas, generated with the built-in image_gen tool. Existing room and symbol artwork supplied as style references. CSS frames each panel without modifying the source image.
+`docs/provenance/prologue.png` — 1536×1024 four-panel comic atlas, generated with the built-in image_gen tool. Existing room and symbol artwork supplied as style references. CSS frames each panel without modifying the source image.
 
 Final generation prompt:
 
@@ -66,9 +66,9 @@ Created with the built-in image_gen tool. The four user-supplied images were sty
 
 ## Files
 
-- `public/assets/symbols-v2.png` — final 1536×1024, 3×2 sprite atlas. Phaser samples a centered 416×416 area in each 512×512 cell. Reading order: kopi, sandals, ojol helmet, rooster, rupiah stack, crown.
-- `public/assets/symbols.png` — first draft, retained for provenance; not used in the game.
-- `public/assets/kos-room.png` — 1536×1024 environmental backdrop.
+- `public/assets/symbols-v2.webp` — final 1536×1024, 3×2 sprite atlas. Phaser samples a centered 416×416 area in each 512×512 cell. Reading order: kopi, sandals, ojol helmet, rooster, rupiah stack, crown.
+- `docs/provenance/symbols.png` — first draft, retained for provenance; not used in the game.
+- `public/assets/kos-room.webp` — 1536×1024 environmental backdrop.
 
 ## Initial atlas prompt
 
