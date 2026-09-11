@@ -45,11 +45,11 @@ The tree replaces the flat upgrade purchase list. Each node shows its effect, ra
 | Mesin | Pengali Cuan → Tahan Dulu / Mesin Ngebut → auto-spin and advanced machines | Payout multipliers, held respins, animation speed, machine unlocks |
 | Di Jalan | Pelanggan Tetap → Jam Ramai → Motor Terawat | Higher fares → more bonus bags → smaller collision deductions |
 
-Pelanggan Tetap starts at Rp6,500 and adds Rp750 to base fare per rank (3 ranks). Jam Ramai starts at Rp10,000 and adds eight percentage points to random bonus-order appearance per rank (3 ranks, maximum 66%). Motor Terawat starts at Rp14,000 and reduces the Rp600 collision deduction by Rp150 per rank (2 ranks). Active shift terms are fixed at departure.
+Pelanggan Tetap starts at Rp6,500 and adds Rp1,250 to base fare per rank (3 ranks). Jam Ramai starts at Rp10,000 and adds eight percentage points to random bonus-order appearance per rank (3 ranks, maximum 66%). Motor Terawat starts at Rp14,000 and reduces the Rp600 collision deduction by Rp150 per rank (2 ranks). Active shift terms are fixed at departure.
 
-Hoki Kecil starts at Rp18,000, with 3 ranks. Each adds two percentage points to assistance on an otherwise empty initial slot result. It creates a common coffee match, not a rare symbol; combined assistance is capped at 30%. The hidden loss-streak pity still has no meter and no fixed guaranteed payout. Luck never modifies the finale's 1% chance.
+Hoki Kecil starts at Rp18,000, with 3 ranks. Each adds eight percentage points to assistance on an otherwise empty initial slot result. Receh assistance is a coffee triple; Sultan is a coffee pair; Rantai is a coffee triple. It never creates a rare symbol. Receh assistance is capped at 50%; Sultan and Rantai stay capped at 30%. The hidden loss-streak pity still has no meter and no fixed guaranteed payout. Luck never modifies the finale's 1% chance.
 
-Sultan now requires Tahan Dulu I as well as 30 spins and Rp18,000. Rantai requires Sultan and Pengali Cuan II, plus 60 spins and Rp24,000. Auto-spin needs both Tahan Dulu I and Mesin Ngebut I. One rank in a parent is enough to open its child unless a higher rank is explicitly specified.
+Pengali Cuan starts at Rp8,000 and adds 25% slot prizes per rank (5 ranks). The next rank of any upgrade costs 2.4× the previous. Sultan requires Tahan Dulu I as well as 30 spins and Rp28,000. Rantai requires Sultan and Pengali Cuan II, plus 60 spins and Rp42,000. Auto-spin needs both Tahan Dulu I and Mesin Ngebut I. One rank in a parent is enough to open its child unless a higher rank is explicitly specified.
 
 Four new generated assets are included: `home-v05.png`, `ojol-atlas.png`, `road-v05.png`, and `progression-atlas.png`. Their full prompts and rendering notes are in `ARTWORK.md`.
 
@@ -63,7 +63,7 @@ Four new generated assets are included: `home-v05.png`, `ojol-atlas.png`, `road-
 - Actions cannot start without enough time. An exhausted day stops auto-spin and offers the end-of-day review. There is no unlimited work beyond the daily budget.
 - **Tutup Hari** reviews cash and today's obligations. Confirmation pays those obligations automatically, then restores the daily allowance. Unspent time is discarded. If cash cannot cover today's obligations, confirming ends the run.
 - An active shift must be completed before ending the day; leaving its panel pauses it. Refresh keeps the reserved time and route progress.
-- **Ritme Sehat** costs Rp10,000 initially and adds 60 active minutes per level, maximum two levels. **Rute & Fokus** costs Rp14,000 initially and cuts shift time by 30 minutes and spin time by 5 minutes per level, maximum two levels. Upgrade prices multiply by 1.8 per level. These upgrades reset on prestige.
+- **Ritme Sehat** costs Rp10,000 initially and adds 60 active minutes per level, maximum two levels. **Rute & Fokus** costs Rp14,000 initially and cuts shift time by 30 minutes and spin time by 5 minutes per level, maximum two levels. Upgrade prices multiply by 2.4 per level. These upgrades reset on prestige.
 - Monetary pressure still rises every 40 activity points: one per spin, four per completed shift. Each tier adds 15 percentage points to machine fees, capped at +150%. Calendar deadlines are separate from pressure points.
 
 ### Ojol: three-lane riding
@@ -96,7 +96,9 @@ New offers add 5 interest percentage points per pressure tier. Accepted interest
 
 There is no Bonus Sabar meter or sixth-loss cash award. This section documents balancing for the developer; these details are not displayed in the game.
 
-After three consecutive zero-payout spins, an otherwise losing initial grid gets a 4% assistance check. Each further consecutive zero increases that by four percentage points, capped at 24%. A successful check makes a low-value coffee pair (or a coffee triple on Rantai). Any payout resets the streak, including a payout below stake. Assistance never directly creates a rare symbol or guarantees a win after a fixed number of losses. It persists across saves, resets on prestige, and never affects the finale's 1% chance.
+Receh assistance starts after two consecutive zero-payout spins: 20%, then +8 percentage points per further empty, capped at 50%. A successful Receh check writes a coffee triple on the paying center row. Sultan and Rantai still wait until three empties, then 4% + 4 percentage points per further empty, capped at 24% before luck, and write a coffee pair (Sultan) or coffee triple (Rantai). Any payout resets the streak. Assistance never directly creates a rare symbol or guarantees a win after a fixed number of losses. It persists across saves, resets on prestige, and never affects the finale's 1% chance.
+
+Naked Receh expected return stays slightly negative, so Ojol remains the starter wage. After Pengali Cuan I, Receh expected return is positive: a full day at the starter slot can cover kos without narik. Ojol still pays more per minute, which is the recovery job if Receh empties the wallet. Sultan costs 3× and hits on three lines: bigger sessions, faster dumps. If Sultan empties the wallet, Receh is still cheap enough to grind. Rantai stays triples-only; pair table changes do not pay there.
 
 ## Story, tutorial and phone
 
@@ -111,10 +113,10 @@ The phone contains Messages, Judol, the upgrade shop, Pinjol and the late finale
 | Machine | Gameplay | Base cost | Unlock |
 |---|---|---|---|
 | Receh Rejeki | Pairs or triples on the center row; optional paid hold after upgrading | 1× stake | Starting machine |
-| Sultan Malam | Pairs or triples on three horizontal lines | 3× stake | Tahan Dulu I + 30 spins + Rp18,000 |
-| Rantai Rejeki | Triples clear and refill; triple payout ×1.5, then cascade factors 1×, 2×, 4×; maximum three evaluated stages; no hold | 3× stake | Sultan + Pengali Cuan II + 60 spins + Rp24,000 |
+| Sultan Malam | Pairs or triples on three horizontal lines | 3× stake | Tahan Dulu I + 30 spins + Rp28,000 |
+| Rantai Rejeki | Triples clear and refill; triple payout ×1.5, then cascade factors 1×, 2×, 4×; maximum three evaluated stages; no hold | 3× stake | Sultan + Pengali Cuan II + 60 spins + Rp42,000 |
 
-Base symbol weights are coffee 30, sandals 24, helmet 18, rooster 14, money 9, crown 5. Soft pity can modify an otherwise empty initial result. Pair payouts are 0.5× / 0.75× / 1× / 1.5× / 2.5× / 5×; triples 3× / 5× / 8× / 12× / 24× / 60×.
+Base symbol weights are coffee 30, sandals 24, helmet 18, rooster 14, money 9, crown 5. Soft pity can modify an otherwise empty initial result. Pair payouts are 1× / 1.25× / 1.5× / 1.5× / 2.5× / 5×; triples 3× / 5× / 8× / 12× / 24× / 60×. A coffee pair returns the stake; pressure fees can still make that spin a loss.
 
 Existing upgrades add payout multipliers, one paid held respin, shorter visual animations, and auto-spin. The animation-speed upgrade does not reduce in-game time; Rute & Fokus does. Each 40 spins grants one prestige memory, plus one for each advanced machine opened. Each memory supplies Rp5,000 starting cash and +2% payout, with the permanent multiplier capped at +50%.
 

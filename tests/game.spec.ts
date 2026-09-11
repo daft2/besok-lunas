@@ -58,7 +58,7 @@ test('Sultan unlock and mode switching update the real spin cost', async ({ page
   await start(page, s); await page.locator('#sultan-tab').click(); await page.locator('[data-action="unlock"]').click();
   await expect(page.locator('#machine-name')).toHaveText('SULTAN MALAM');
   await expect(page.locator('#spin-cost')).toContainText('Rp3.000');
-  expect((await saved(page)).cash).toBe(27000);
+  expect((await saved(page)).cash).toBe(17000);
   await page.locator('#bet-up').click(); await expect(page.locator('#spin-cost')).toContainText('Rp6.000');
   await page.locator('#receh-tab').click(); await expect(page.locator('#spin-cost')).toContainText('Rp2.000');
 });

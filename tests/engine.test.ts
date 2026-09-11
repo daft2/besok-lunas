@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fresh as newRun, spin, evaluate, cost, buyUpgrade, upgradeCost, unlockSultan, payBill, endRun, prestige, parseSave, parseBank, queueEvents, queueDueEvents, markFired, insightEarned, motionReduced, type Grid, type SaveBank, advanceTime, quoteLoan, borrow, repayLoan, loanDue, startJob, jobStep, cascade, tier, minimumCost, baseCost, unlockMachine, beginFinale, revealFinale, finaleReady, totalDebt, endDay, remainingTime, jobMinutes, spinMinutes, dayCapacity, canWork, moveLane, makeRoad, jobReward, ROAD_LENGTH, jobQuote } from '../src/engine';
+import { fresh as newRun, spin, evaluate, cost, buyUpgrade, upgradeCost, unlockSultan, payBill, endRun, prestige, parseSave, parseBank, queueEvents, queueDueEvents, markFired, insightEarned, motionReduced, type Grid, type SaveBank, advanceTime, quoteLoan, borrow, repayLoan, loanDue, startJob, jobStep, cascade, tier, minimumCost, baseCost, unlockMachine, beginFinale, revealFinale, finaleReady, totalDebt, endDay, remainingTime, jobMinutes, spinMinutes, dayCapacity, canWork, moveLane, makeRoad, jobReward, ROAD_LENGTH, jobQuote, machinePrice, UPGRADE_GROWTH, multiplier } from '../src/engine';
 import { dueEvents, hasBlockingEvent, pendingBlock, pendingNotify } from '../src/events';
 
 const fresh = (insight = 0, runs = 1) => { const s = newRun(insight, runs); s.cash = 45000 + insight * 5000; return s; };
@@ -8,7 +8,7 @@ const fresh = (insight = 0, runs = 1) => { const s = newRun(insight, runs); s.ca
 test('pairs pay once; triples replace rather than stack with pair payouts', () => {
   const grid: Grid = [[1, 0, 2], [1, 0, 3], [4, 0, 2]];
   assert.equal(evaluate(grid, 1000, [1])[0].amount, 3000);
-  assert.deepEqual(evaluate(grid, 1000, [0, 1, 2]).map(w => w.amount), [750, 3000, 1000]);
+  assert.deepEqual(evaluate(grid, 1000, [0, 1, 2]).map(w => w.amount), [1250, 3000, 1500]);
 });
 test('pair can occur on the two outside reels', () => {
   const grid: Grid = [[1, 4, 2], [1, 0, 3], [4, 4, 2]];
@@ -33,8 +33,8 @@ test('soft pity has no fixed sixth payout, grows moderately and resets after a w
  const losing=(assist:number)=>{let n=0;return ()=>n<9?[0,.4,.7][Math.floor(n++/3)]:assist;};
  for(let i=0;i<8;i++)assert.equal(spin(s,null,losing(.99))!.payout,0);
  assert.equal(s.pityLosses,8);assert.equal(s.cash,92000);
- const r=spin(s,null,losing(.1))!;assert.equal(r.payout,500);assert.equal(r.bonus,0);assert.equal(s.pityLosses,0);
- s.pityLosses=50;assert.equal(spin(s,null,losing(.25))!.payout,0);assert.equal(s.pityLosses,50);
+ const r=spin(s,null,losing(.1))!;assert.equal(r.payout,3000);assert.equal(r.bonus,0);assert.equal(s.pityLosses,0);
+ s.pityLosses=50;assert.equal(spin(s,null,losing(.99))!.payout,0);assert.equal(s.pityLosses,50);
  spin(s,null,()=>0);assert.equal(s.pityLosses,0);
 });
 
@@ -66,10 +66,21 @@ test('upgrades enforce cost, max level, and financial lock', () => {
   s.bill = 4000; assert.equal(buyUpgrade(s, 'payout'), false);
   s.bill = 0; s.cash = 0; assert.equal(buyUpgrade(s, 'turbo'), false);
 });
+test('first Mesin rank is cheap and fat; the next rank and machine cost more', () => {
+  const s = fresh();
+  assert.equal(upgradeCost(s, 'payout'), 8000);
+  assert.equal(multiplier(s), 1);
+  s.upgrades.payout = 1;
+  assert.equal(multiplier(s), 1.25);
+  assert.equal(upgradeCost(s, 'payout'), Math.round(8000 * UPGRADE_GROWTH));
+  assert.ok(upgradeCost(s, 'payout') > 18000);
+  assert.equal(machinePrice(1), 28000);
+  assert.equal(machinePrice(2), 42000);
+});
 test('Sultan unlock requires both milestone and money and can only be purchased once', () => {
   const s = fresh(); assert.equal(unlockSultan(s), false);
-  s.upgrades.hold = 1; s.spins = 30; s.cash = 17999; assert.equal(unlockSultan(s), false);
-  s.cash = 18000; assert.equal(unlockSultan(s), true); assert.equal(s.cash, 0); assert.equal(unlockSultan(s), false);
+  s.upgrades.hold = 1; s.spins = 30; s.cash = 27999; assert.equal(unlockSultan(s), false);
+  s.cash = 28000; assert.equal(unlockSultan(s), true); assert.equal(s.cash, 0); assert.equal(unlockSultan(s), false);
 });
 test('prestige retains earned insight, resets liabilities and unlocks, and cannot farm instant resets', () => {
   const s = fresh(2, 3); s.spins = 85; s.sultanUnlocked = true; s.upgrades.hold = 1;
@@ -140,7 +151,7 @@ test('cascade spin settles once, preserves final grid, forbids hold and requires
   s.upgrades.hold = 1; s.canHold = true; assert.equal(spin(s,0), null);
   const before = s.cash, r = spin(s,null,()=>0)!;
   assert.equal(r.cascades.length, 3); assert.equal(r.paid,3000);
-  assert.equal(r.payout, 122850); assert.equal(s.cash,before-3000+122850);
+  assert.equal(r.payout, 141750); assert.equal(s.cash,before-3000+141750);
   assert.deepEqual(s.grid,r.cascades[2].grid); assert.equal(s.canHold,false);
 });
 test('pity survives saving and does not introduce a separate cash bonus',()=>{
@@ -249,8 +260,8 @@ test('machine nodes need branch prerequisites in addition to milestones',()=>{
 });
 test('Ojol specialisation increases fare, bonus frequency and reduces collision cost',()=>{
  const s=fresh();s.upgrades.fare=3;s.upgrades.orders=3;s.upgrades.safety=2;
- assert.equal(jobQuote(s).fare,7250);startJob(s,()=>.5);assert.equal(s.job!.damage,300);
- assert.equal(jobReward({...s.job!,hits:1,orders:0}),5450);
+ assert.equal(jobQuote(s).fare,8750);startJob(s,()=>.5);assert.equal(s.job!.damage,300);
+ assert.equal(jobReward({...s.job!,hits:1,orders:0}),6950);
  const regular=makeRoad(()=>.5),busier=makeRoad(()=>.5,.24);
  assert.equal(regular.slice(2).filter(r=>r.order!==null).length,0);
  assert.equal(busier.slice(2).filter(r=>r.order!==null).length,10);
@@ -259,7 +270,7 @@ test('Ojol specialisation increases fare, bonus frequency and reduces collision 
 test('luck only modestly assists common symbols and cannot change the finale draw',()=>{
  const lose=()=>{let i=0;return ()=>i<9?[0,.4,.7][Math.floor(i++/3)]:.05;};
  const plain=fresh(),lucky=fresh();lucky.upgrades.luck=3;
- assert.equal(spin(plain,null,lose())!.payout,0);assert.equal(spin(lucky,null,lose())!.payout,500);
+ assert.equal(spin(plain,null,lose())!.payout,0);assert.equal(spin(lucky,null,lose())!.payout,3000);
  const final=finalCandidate();final.upgrades.luck=3;beginFinale(final,()=>.01);assert.equal(final.story.finale!.roll,1);
 });
 test('v4 saves preserve owned upgrades and current road while adding new branch ranks',()=>{
@@ -452,6 +463,52 @@ test('parseSave fills missing winStreak without bumping the run version', () => 
   assert.equal(restored.version, 5);
   assert.equal(restored.winStreak, 0);
   assert.equal(parseSave(JSON.stringify({ ...s, winStreak: -1 })), null);
+});
+
+function ojolSlice(s = newRun()) {
+  return jobQuote(s).net * spinMinutes(s) / jobMinutes(s);
+}
+function recehNet(payout: number, n = 24000) {
+  let seed = 20260911;
+  const rng = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+  const s = newRun();
+  s.cash = 50_000_000;
+  s.upgrades.payout = payout;
+  let net = 0;
+  for (let i = 0; i < n; i++) {
+    s.minutes = 0;
+    s.turns = 0;
+    const r = spin(s, null, rng);
+    assert.ok(r);
+    net += r!.payout - r!.paid;
+  }
+  return net / n;
+}
+
+test('naked Receh stays a grind; Pengali Cuan I can cover living without beating Ojol wages', () => {
+  const slice = ojolSlice();
+  const naked = recehNet(0);
+  const upgraded = recehNet(1);
+  assert.ok(slice > 500);
+  assert.ok(naked < 0 && naked > -150);
+  assert.ok(upgraded > 50);
+  assert.ok(upgraded < slice);
+});
+
+test('Sultan that is too expensive still leaves Receh and Ojol', () => {
+  const s = fresh();
+  s.sultanUnlocked = true;
+  s.machine = 1;
+  s.cash = 2500;
+  assert.equal(cost(s), 3000);
+  assert.equal(spin(s), null);
+  s.machine = 0;
+  assert.equal(cost(s), 1000);
+  assert.ok(spin(s, null, () => 0));
+  const broke = newRun();
+  assert.equal(broke.cash, 0);
+  assert.equal(canWork(broke), true);
+  assert.equal(startJob(broke), true);
 });
 
 test('paying a kos bill drops the stale block on the next queue', () => {

@@ -3,22 +3,22 @@ import { dueEvents, eventById, hasBlockingEvent } from './events';
 export type SymbolId = 0 | 1 | 2 | 3 | 4 | 5;
 export type Grid = SymbolId[][];
 export const SYMBOLS = [
-  { name: 'Kopi', weight: 30, pair: .5, triple: 3 },
-  { name: 'Sandal', weight: 24, pair: .75, triple: 5 },
-  { name: 'Helm', weight: 18, pair: 1, triple: 8 },
+  { name: 'Kopi', weight: 30, pair: 1, triple: 3 },
+  { name: 'Sandal', weight: 24, pair: 1.25, triple: 5 },
+  { name: 'Helm', weight: 18, pair: 1.5, triple: 8 },
   { name: 'Ayam', weight: 14, pair: 1.5, triple: 12 },
   { name: 'Rupiah', weight: 9, pair: 2.5, triple: 24 },
   { name: 'Sultan', weight: 5, pair: 5, triple: 60 },
 ] as const;
 export type Upgrade = 'payout' | 'hold' | 'turbo' | 'auto' | 'stamina' | 'efficient' | 'luck' | 'fare' | 'orders' | 'safety';
 export const UPGRADES: Record<Upgrade, { name: string; desc: string; base: number; max: number; icon: string }> = {
-  luck: { name: 'Hoki Kecil', desc: 'Sedikit peluang bantuan pasangan kopi (+2% per rank). Tidak mengubah peluang akhir cerita.', base: 18000, max: 3, icon: '♣' },
-  fare: { name: 'Pelanggan Tetap', desc: '+15% tarif dasar Ojol per rank.', base: 6500, max: 3, icon: 'Rp' },
+  luck: { name: 'Hoki Kecil', desc: 'Peluang bantuan kopi di hasil kosong (+8% per rank). Tidak mengubah peluang akhir cerita.', base: 18000, max: 3, icon: '♣' },
+  fare: { name: 'Pelanggan Tetap', desc: '+25% tarif dasar Ojol per rank.', base: 6500, max: 3, icon: 'Rp' },
   orders: { name: 'Jam Ramai', desc: '+8% peluang order bonus muncul per rank.', base: 10000, max: 3, icon: '+' },
   safety: { name: 'Motor Terawat', desc: 'Potongan benturan berkurang Rp150 per rank.', base: 14000, max: 2, icon: '⚒' },
   stamina: { name: 'Ritme Sehat', desc: '+1 jam waktu aktif setiap hari. Maksimal +2 jam.', base: 10000, max: 2, icon: '☀' },
   efficient: { name: 'Rute & Fokus', desc: 'Order −30 menit; spin −5 menit per level.', base: 14000, max: 2, icon: '◷' },
-  payout: { name: 'Pengali Cuan', desc: '+15% hadiah slot per rank. Bukan peluang menang.', base: 8000, max: 5, icon: '×' },
+  payout: { name: 'Pengali Cuan', desc: '+25% hadiah slot per rank. Bukan peluang menang.', base: 8000, max: 5, icon: '×' },
   hold: { name: 'Tahan Dulu', desc: 'Tahan 1 reel, respin berbayar sekali. Bukan di Rantai.', base: 12000, max: 1, icon: 'Ⅱ' },
   turbo: { name: 'Mesin Ngebut', desc: 'Animasi reel 25% lebih cepat per level.', base: 6000, max: 2, icon: 'ϟ' },
   auto: { name: 'Jempol Otomatis', desc: 'Auto-spin berhenti saat tagihan atau saldo tipis.', base: 16000, max: 1, icon: '↻' },
@@ -65,7 +65,7 @@ export const feeRate = (s: State) => tier(s) * .15;
 export const baseCost = (s: State) => s.bet * (s.machine ? 3 : 1);
 export const cost = (s: State) => Math.ceil(baseCost(s) * (100 + tier(s) * 15) / 100);
 export const minimumCost = (s: State) => 1000 + tier(s) * 150;
-export const multiplier = (s: State) => 1 + s.upgrades.payout * .15 + Math.min(s.insight, 25) * .02;
+export const multiplier = (s: State) => 1 + s.upgrades.payout * .25 + Math.min(s.insight, 25) * .02;
 export const totalDebt = (s: State) => s.familyDebt + s.debt + (s.loan?.balance ?? 0);
 export const dayCapacity = (s: State) => 600 + s.upgrades.stamina * 60;
 export const remainingTime = (s: State) => Math.max(0, dayCapacity(s) - s.minutes);
@@ -92,11 +92,12 @@ export function endDay(s: State): boolean {
 }
 export const blocked = (s: State) => s.ended || !!s.bill || loanDue(s) || !!s.job || !!s.story.finale || hasBlockingEvent(s);
 export const nextBill = (s: State) => Math.min(s.debt, 4000 + Math.floor(s.day / 3) * 3000);
-export const upgradeCost = (s: State, id: Upgrade) => Math.round(UPGRADES[id].base * 1.8 ** s.upgrades[id]);
+export const UPGRADE_GROWTH = 2.4;
+export const upgradeCost = (s: State, id: Upgrade) => Math.round(UPGRADES[id].base * UPGRADE_GROWTH ** s.upgrades[id]);
 export const UPGRADE_PARENTS: Partial<Record<Upgrade, Upgrade[]>> = { efficient: ['stamina'], luck: ['efficient'], hold: ['payout'], turbo: ['payout'], auto: ['hold', 'turbo'], orders: ['fare'], safety: ['orders'] };
 export const upgradePrerequisites = (s: State, id: Upgrade) => (UPGRADE_PARENTS[id] ?? []).every(parent => s.upgrades[parent] > 0);
 export const upgradeRequirement = (id: Upgrade) => (UPGRADE_PARENTS[id] ?? []).map(parent => UPGRADES[parent].name + ' I').join(' + ');
-export const machinePrice = (id: 1 | 2) => id === 1 ? 18000 : 24000;
+export const machinePrice = (id: 1 | 2) => id === 1 ? 28000 : 42000;
 export function machineRequirement(s: State, id: 1 | 2): string {
   const requirements: string[] = [];
   if (s.spins < (id === 1 ? 30 : 60)) requirements.push(`${id === 1 ? 30 : 60} spin`);
@@ -110,6 +111,28 @@ export function log(s: State, text: string, kind: Entry['kind'] = 'info') { s.lo
 export function randomSymbol(rng = Math.random): SymbolId {
   let n = rng() * 100;
   for (let i = 0; i < SYMBOLS.length; i++) { n -= SYMBOLS[i].weight; if (n < 0) return i as SymbolId; } return 5;
+}
+// Soft pity only rewrites an otherwise empty initial grid. It never creates rare symbols.
+// Receh: coffee triple after a dry streak so the starter slot can refill you.
+// Sultan: coffee pair, a cheap consolation after a 3-line blank.
+// Rantai: coffee triple, the only result that machine pays.
+function pityChance(s: State): number {
+  const luck = s.upgrades.luck * .08;
+  if (s.machine === 0) {
+    const streak = s.pityLosses >= 2 ? .20 + (s.pityLosses - 2) * .08 : 0;
+    return Math.min(.50, streak + luck);
+  }
+  if (s.pityLosses < 3 && s.upgrades.luck === 0) return 0;
+  return Math.min(.30, Math.min(.24, Math.max(0, s.pityLosses - 2) * .04) + luck);
+}
+function applySoftPity(s: State, grid: Grid, rng: () => number): void {
+  const eligibleRows = s.machine ? [0, 1, 2] : [1];
+  if (evaluate(grid, s.bet, eligibleRows, 1, s.machine === 2).length) return;
+  const chance = pityChance(s);
+  if (chance <= 0 || rng() >= chance) return;
+  grid[0][1] = 0;
+  grid[1][1] = 0;
+  grid[2][1] = s.machine === 1 ? 1 : 0;
 }
 export interface LineWin { row: number; symbol: SymbolId; count: number; amount: number; columns: number[]; }
 export function evaluate(grid: Grid, bet: number, rows: number[], mult = 1, triplesOnly = false): LineWin[] {
@@ -142,12 +165,7 @@ export function spin(s: State, held: number | null = null, rng = Math.random): S
   if (held !== null && (s.machine === 2 || !Number.isInteger(held) || held < 0 || held > 2 || !s.canHold || !s.upgrades.hold)) return null;
   const paid = cost(s); s.cash -= paid; s.minutes += spinMinutes(s);
   const initial = Array.from({ length: 3 }, (_, x) => x === held ? [...s.grid[x]] : Array.from({ length: 3 }, () => randomSymbol(rng))) as Grid;
-  // Soft pity only assists an otherwise empty initial grid. It never creates rare symbols.
-  const eligibleRows = s.machine ? [0,1,2] : [1];
-  if (!evaluate(initial, s.bet, eligibleRows, 1, s.machine === 2).length && (s.pityLosses >= 3 || s.upgrades.luck > 0) && rng() < Math.min(.30, Math.min(.24, Math.max(0, s.pityLosses - 2) * .04) + s.upgrades.luck * .02)) {
-    initial[0][1] = 0; initial[1][1] = 0;
-    initial[2][1] = s.machine === 2 ? 0 : 1;
-  }
+  applySoftPity(s, initial, rng);
   const cascades = s.machine === 2 ? cascade(initial, s.bet, multiplier(s), rng) : [];
   const wins = s.machine === 2 ? cascades.flatMap(c => c.wins) : evaluate(initial, s.bet, s.machine === 1 ? [0, 1, 2] : [1], multiplier(s));
   const payout = wins.reduce((sum, w) => sum + w.amount, 0);
@@ -192,7 +210,7 @@ export function repayLoan(s: State, amount: number): boolean {
   if (!s.loan.balance) { s.loan = null; log(s, 'Pinjol lunas. Jangan klik tawarannya lagi.'); } return true;
 }
 export function jobQuote(s: State) {
-  const fare = 5000 + s.upgrades.fare * 750, fuel = Math.min(3000, 1500 + tier(s) * 150); return { fare, fuel, net: fare - fuel };
+  const fare = 5000 + s.upgrades.fare * 1250, fuel = Math.min(3000, 1500 + tier(s) * 150); return { fare, fuel, net: fare - fuel };
 }
 export const ROAD_LENGTH = 12;
 export function makeRoad(rng = Math.random, orderBonus = 0): RoadRow[] {
