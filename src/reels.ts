@@ -1,5 +1,16 @@
 import Phaser from 'phaser';
-import type { Grid, SpinResult } from './engine';
+import type { Grid, MachineId, SpinResult } from './engine';
+
+interface ReelArt { key: string; count: number; cols: number; cell: number; frame: number; bg: number; }
+// Per-machine sprite sheets. Frames are centered crops; margins stay clear of
+// atlas edges so packed-artifact seams never show on the reels.
+const ART: ReelArt[] = [
+  { key: 'symbols', count: 6, cols: 3, cell: 512, frame: 416, bg: 0xfff0ce },
+  { key: 'symbols', count: 6, cols: 3, cell: 512, frame: 416, bg: 0xfff0ce },
+  { key: 'symbols', count: 6, cols: 3, cell: 512, frame: 416, bg: 0xfff0ce },
+  { key: 'buah', count: 8, cols: 4, cell: 720, frame: 680, bg: 0xfff0ce },
+  { key: 'petir', count: 8, cols: 4, cell: 512, frame: 380, bg: 0xf8d094 },
+];
 
 export class ReelScene extends Phaser.Scene {
   private icons: Phaser.GameObjects.Image[][] = [];
@@ -10,30 +21,50 @@ export class ReelScene extends Phaser.Scene {
   private readyCallback: (scene: ReelScene) => void;
   private initial: Grid;
   private mode = 0;
+  private machine: MachineId = 0;
+  private last: Grid;
   private rowY(row: number) { return this.mode ? 55 + row * 110 : -10 + row * 175; }
   private iconSize() { return this.mode ? 104 : 175; }
   private get reduce() { return document.documentElement.dataset.reducedMotion === 'true'; }
-  constructor(grid: Grid, ready: (s: ReelScene) => void) { super('Reels'); this.initial = grid; this.readyCallback = ready; }
-  preload() { this.load.image('symbols', '/assets/symbols-v2.webp'); }
+  private art() { return ART[this.machine]; }
+  constructor(grid: Grid, machine: MachineId, ready: (s: ReelScene) => void) { super('Reels'); this.initial = grid; this.machine = machine; this.last = grid; this.readyCallback = ready; }
+  preload() {
+    this.load.image('symbols', '/assets/symbols-v2.webp');
+    this.load.image('buah', '/assets/buah-atlas.webp');
+    this.load.image('petir', '/assets/petir-atlas.webp');
+  }
   create() {
-    const texture = this.textures.get('symbols');
-    const source = texture.getSourceImage() as HTMLImageElement;
-    for (let i = 0; i < 6; i++) texture.add(i, 0, i % 3 * source.width / 3 + 48, Math.floor(i / 3) * source.height / 2 + 48, source.width / 3 - 96, source.height / 2 - 96);
+    for (const art of ART) {
+      const texture = this.textures.get(art.key);
+      if ((texture.frames as Record<number, unknown>)[art.count - 1]) continue;
+      const source = texture.getSourceImage() as HTMLImageElement;
+      const margin = (art.cell - art.frame) / 2;
+      for (let i = 0; i < art.count; i++) texture.add(i, 0, i % art.cols * art.cell + margin, Math.floor(i / art.cols) * art.cell + margin, art.frame, art.frame);
+    }
     this.cameras.main.setBackgroundColor('#fff0ce');
     const g = this.add.graphics();
     g.fillStyle(0xb8a17d, .32); g.fillRect(196, 0, 6, 330); g.fillRect(396, 0, 6, 330);
+    const art0 = this.art();
     for (let col = 0; col < 3; col++) {
       this.icons[col] = [];
       for (let row = 0; row < 3; row++) {
-        this.icons[col][row] = this.add.image(100 + col * 200, this.rowY(row), 'symbols', this.initial[col][row]).setDisplaySize(this.iconSize(), this.iconSize());
+        const frame = Math.min(this.initial[col][row], art0.count - 1);
+        this.icons[col][row] = this.add.image(100 + col * 200, this.rowY(row), art0.key, frame).setDisplaySize(this.iconSize(), this.iconSize());
       }
     }
-    this.shades = this.add.graphics(); this.line = this.add.graphics(); this.setMode(0);
+    this.shades = this.add.graphics(); this.line = this.add.graphics(); this.setMode(this.machine === 0 ? 0 : 1);
     this.readyCallback(this);
+  }
+  setMachine(machine: MachineId) {
+    this.machine = machine;
+    this.setMode(machine === 0 ? 0 : 1);
+    this.display(this.last);
   }
   setMode(mode: number) {
     this.mode = mode;
-    this.icons.forEach(col => col.forEach((img, row) => { this.tweens.killTweensOf(img); img.setY(this.rowY(row)).setDisplaySize(this.iconSize(), this.iconSize()); }));
+    const art = this.art();
+    this.icons.forEach(col => col.forEach((img, row) => { this.tweens.killTweensOf(img); img.setTexture(art.key).setY(this.rowY(row)).setDisplaySize(this.iconSize(), this.iconSize()); }));
+    this.cameras.main.setBackgroundColor(art.bg === 0xfff0ce ? '#fff0ce' : '#f8d094');
     this.shades.clear();
     if (!mode) {
       this.shades.fillStyle(0x3d263a, .62); this.shades.fillRect(0, 0, 600, 77); this.shades.fillRect(0, 253, 600, 77);
@@ -43,16 +74,19 @@ export class ReelScene extends Phaser.Scene {
     if (mode) { this.line.lineStyle(2, 0xffc94e, .5); this.line.strokeRect(3, 1, 594, 108); this.line.strokeRect(3, 221, 594, 108); }
   }
   display(grid: Grid) {
-    this.icons.forEach((col, x) => col.forEach((img, y) => { this.tweens.killTweensOf(img); img.setFrame(grid[x][y]).setY(this.rowY(y)).setAlpha(1).setDisplaySize(this.iconSize(), this.iconSize()); }));
+    this.last = grid;
+    const art = this.art();
+    this.icons.forEach((col, x) => col.forEach((img, y) => { this.tweens.killTweensOf(img); img.setTexture(art.key, grid[x][y]).setY(this.rowY(y)).setAlpha(1).setDisplaySize(this.iconSize(), this.iconSize()); }));
   }
   update(_time: number, delta: number) {
     this.tick += delta;
+    const max = this.art().count - 1;
     this.icons.forEach((col, x) => {
       if (!this.rolling[x]) return;
       col.forEach(img => {
-        if (this.reduce) { if (this.tick > 100) img.setFrame(Phaser.Math.Between(0, 5)); return; }
+        if (this.reduce) { if (this.tick > 100) img.setFrame(Phaser.Math.Between(0, max)); return; }
         img.y += delta * 1.45;
-        if (img.y > (this.mode ? 385 : 427)) { img.y -= this.mode ? 330 : 525; img.setFrame(Phaser.Math.Between(0, 5)); }
+        if (img.y > (this.mode ? 385 : 427)) { img.y -= this.mode ? 330 : 525; img.setFrame(Phaser.Math.Between(0, max)); }
       });
     });
     if (this.tick > 100) this.tick = 0;
@@ -83,7 +117,7 @@ export class ReelScene extends Phaser.Scene {
             if (step.wins.length) this.celebrate({ ...result, wins: step.wins });
             await new Promise<void>(done => this.time.delayedCall(this.reduce ? 120 : 480, done));
             if (i < result.cascades.length - 1) {
-              step.wins.forEach(w => w.columns.forEach(x => this.icons[x][w.row].setAlpha(.12)));
+              for (const w of step.wins) for (const [cx, cy] of w.cells ?? w.columns.map(x => [x, w.row] as [number, number])) this.icons[cx][cy].setAlpha(.12);
               await new Promise<void>(done => this.time.delayedCall(this.reduce ? 30 : 180, done));
             }
           }
@@ -97,8 +131,9 @@ export class ReelScene extends Phaser.Scene {
     });
   }
   private celebrate(result: SpinResult) {
-    for (const win of result.wins) for (const x of win.columns) {
-      const img = this.icons[x][win.row];
+    for (const win of result.wins) for (const [x, y] of win.cells ?? win.columns.map(cx => [cx, win.row] as [number, number])) {
+      const img = this.icons[x]?.[y];
+      if (!img) continue;
       if (!this.reduce) this.tweens.add({ targets: img, displayWidth: this.iconSize() * 1.08, displayHeight: this.iconSize() * 1.08, duration: 180, yoyo: true, repeat: 1, ease: 'Sine.easeInOut' });
     }
     if (this.reduce) return;
@@ -108,11 +143,11 @@ export class ReelScene extends Phaser.Scene {
     }
   }
 }
-export function createReels(grid: Grid, ready: (scene: ReelScene) => void) {
+export function createReels(grid: Grid, machine: MachineId, ready: (scene: ReelScene) => void) {
   return new Phaser.Game({ type: Phaser.AUTO, parent: 'reels', width: 600, height: 330,
     transparent: false, backgroundColor: '#fff0ce', antialias: true,
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    scene: new ReelScene(grid, ready), audio: { noAudio: true },
+    scene: new ReelScene(grid, machine, ready), audio: { noAudio: true },
     fps: { target: 60, forceSetTimeOut: false },
   });
 }

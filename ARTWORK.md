@@ -1,5 +1,18 @@
 # Generated artwork
 
+## v0.6 parody atlases
+
+Created with OpenLux (seedream-5), then packed and normalized with sharp. Final runtime files:
+
+- `public/assets/buah-atlas.webp`: 2880×1440, 4×2 grid of 720px cells. Banana, rambutan, mangosteen, mango / durian, pineapple, golden durian WILD with star badge, golden bell SCATTER. First generation was grid-accurate; converted straight to WebP.
+- `public/assets/petir-atlas.webp`: 2048×1024, 4×2 grid of 512px cells on uniform `#f8d094` (the thunder machine gets its own golden reel backdrop). Blue gem, red gem, hourglass, ring / laurel, crown, lightning-gate SCATTER, lightning orb. Took three generations: v1 baked the prompt's hex tokens and a `MULTLIPER` typo into corners; v2 came back with tile frames and a gradient background that bleached symbols when flattened; v3 (label-free symbols, no dimension tokens in the prompt, chalice swapped for a crown by the model) packed cleanly. `docs/provenance/petir-source.jpg` retains the v3 source.
+
+Final petir prompt (no hex codes, no dimensions, no tile/frame language — those tokens leak into the artwork as text):
+
+> Production sprite atlas for a cartoon slot game, funny Greek-god theme. ONE wide landscape image with exactly eight symbols arranged in 4 columns and 2 rows, floating directly on a plain flat solid warm ivory background with generous empty space around each symbol, no tiles, no frames, no panels, no grid lines, no dividers, no borders. Chunky cartoon style with very heavy near-black ink outlines, compact chunky silhouettes, angular hard cel shading, playful mobile-game illustration, saturated gold purple and teal colors. Reading order: blue sapphire gem, red ruby gem, golden chalice, hourglass with gold caps, golden ring with red jewel, golden laurel crown, grey stone gate with glowing lightning bolt, glowing purple gold lightning orb. Each object about 70 percent of its cell. Absolutely no text, no letters, no numbers, no labels, no watermark anywhere.
+
+Packing notes: connected-component detection ordered the scrambled v3 layout into spec order; each symbol fit to 380px in its 512px cell; backgrounds unified per machine (ivory for fruit, thunder-gold for petir) so sprite crops sit seamless on the reel canvas.
+
 
 ## v0.5 home, phone, rider and tree assets
 

@@ -50,7 +50,7 @@ test('phone messages and shop work independently; room keyboard cannot spin the 
 test('v2 migration introduces story without erasing cash or upgrades',async({page})=>{
  const s=fresh();s.cash=23456;s.upgrades.hold=1;s.spins=24;s.deliveries=1;
  await load(page,{...s,version:2});await expect(page.locator('.prologue')).toBeVisible();await page.locator('[data-story=skip]').click();
- const migrated=await read(page);expect(migrated.version).toBe(5);expect(migrated.cash).toBe(23456);expect(migrated.upgrades.hold).toBe(1);
+ const migrated=await read(page);expect(migrated.version).toBe(6);expect(migrated.cash).toBe(23456);expect(migrated.upgrades.hold).toBe(1);
  await page.locator('[data-story=replay]').click();await expect(page.locator('.prologue')).toBeVisible();
 });
 test('final ticket stays locked until its milestone and money requirements are met',async({page})=>{
@@ -83,8 +83,8 @@ test('phone upgrade tree enforces parents and Ojol rewards reflect the purchased
  await tree.locator('[data-upgrade=fare]').click();expect((await read(page)).cash).toBe(43500);
  await expect(tree.locator('[data-upgrade=orders]')).toBeEnabled();await tree.locator('[data-upgrade=orders]').click();
  await page.locator('.smartphone footer [data-story=home]').click();await page.locator('[data-story=work]').click();
- await expect(page.locator('.smartphone #phone-app')).toContainText('Rp4.250');
- await page.locator('[data-action=start-job]').click();expect((await read(page)).job!.fare).toBe(5750);
+ await expect(page.locator('.smartphone #phone-app')).toContainText('Rp4.750');
+ await page.locator('[data-action=start-job]').click();expect((await read(page)).job!.fare).toBe(6250);
 });
 
 test('tree branch filters preserve selection after purchase and show remaining budget',async({page})=>{

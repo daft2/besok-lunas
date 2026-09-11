@@ -1,6 +1,6 @@
 import { dueEvents, eventById, hasBlockingEvent } from './events';
 
-export type SymbolId = 0 | 1 | 2 | 3 | 4 | 5;
+export type SymbolId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type Grid = SymbolId[][];
 export const SYMBOLS = [
   { name: 'Kopi', weight: 30, pair: 1, triple: 3 },
@@ -10,6 +10,36 @@ export const SYMBOLS = [
   { name: 'Rupiah', weight: 9, pair: 2.5, triple: 24 },
   { name: 'Sultan', weight: 5, pair: 5, triple: 60 },
 ] as const;
+// Parody machines: fruit-fiesta taste, olympus-style thunder. Wilds substitute
+// regulars (never scatters); scatters pay anywhere and call free spins.
+export type MachineId = 0 | 1 | 2 | 3 | 4;
+export interface MachineSymbol { name: string; weight: number; pair?: number; triple?: number; wild?: boolean; scatter?: boolean; pays?: [number, number, number]; orb?: boolean; }
+export interface MachineDef {
+  id: MachineId; kind: 'lines' | 'cascade' | 'fruit' | 'tumble';
+  name: string; short: string; edition: string; tagline: string; linesLabel: string; help: string;
+  costMult: number; hold: boolean; symbols: MachineSymbol[];
+  wild?: number; scatter?: number; freeSpins: number; freeMult: number; retrigger: number; scatterPay: number;
+}
+const lineSymbols = (list: [string, number, number, number][]): MachineSymbol[] =>
+  list.map(([name, weight, pair, triple]) => ({ name, weight, pair, triple }));
+export const MACHINES: MachineDef[] = [
+  { id: 0, kind: 'lines', name: 'Receh Rejeki', short: 'RECEH REJEKI', edition: 'MESIN RAKYAT · VOL. 01', tagline: 'MODAL RECEH, MIMPI GEDE.', linesLabel: '1 GARIS AKTIF', help: 'Cocokkan 2 atau 3 simbol di garis tengah.', costMult: 1, hold: true, symbols: lineSymbols([['Kopi', 30, 1, 3], ['Sandal', 24, 1.25, 5], ['Helm', 18, 1.5, 8], ['Ayam', 14, 1.5, 12], ['Rupiah', 9, 2.5, 24], ['Sultan', 5, 5, 60]]), freeSpins: 0, freeMult: 1, retrigger: 0, scatterPay: 0 },
+  { id: 1, kind: 'lines', name: 'Sultan Malam', short: 'SULTAN MALAM', edition: 'MESIN SULTAN · VOL. 02', tagline: 'TIGA GARIS. TIGA KALI NEKAT.', linesLabel: '3 GARIS AKTIF', help: '3 garis horizontal. Pasangan dan tripel membayar.', costMult: 3, hold: true, symbols: lineSymbols([['Kopi', 30, 1, 3], ['Sandal', 24, 1.25, 5], ['Helm', 18, 1.5, 8], ['Ayam', 14, 1.5, 12], ['Rupiah', 9, 2.5, 24], ['Sultan', 5, 5, 60]]), freeSpins: 0, freeMult: 1, retrigger: 0, scatterPay: 0 },
+  { id: 2, kind: 'cascade', name: 'Rantai Rejeki', short: 'RANTAI REJEKI', edition: 'MESIN CASCADE · VOL. 03', tagline: 'TRIPEL RUNTUH. PENGALI TUMBUH.', linesLabel: 'TRIPEL → 1× / 2× / 4×', help: 'Hanya tripel. Isi ulang, pengali 1× → 2× → 4×.', costMult: 3, hold: false, symbols: lineSymbols([['Kopi', 30, 1, 3], ['Sandal', 24, 1.25, 5], ['Helm', 18, 1.5, 8], ['Ayam', 14, 1.5, 12], ['Rupiah', 9, 2.5, 24], ['Sultan', 5, 5, 60]]), freeSpins: 0, freeMult: 1, retrigger: 0, scatterPay: 0 },
+  { id: 3, kind: 'fruit', name: 'Buah Berkah', short: 'BUAH BERKAH', edition: 'MESIN BUAH · VOL. 04', tagline: 'WILD DURIAN EMAS. 3 LONCENG = 8 GRATIS.', linesLabel: '3 GARIS + WILD · SCATTER', help: 'Durian emas menggantikan semua buah. 3+ lonceng di mana saja: bayar 2× taruhan + 8 putaran gratis berpengali 2×.', costMult: 2, hold: true,
+    symbols: [...lineSymbols([['Pisang', 26, 1, 3], ['Rambutan', 22, 1.25, 5], ['Manggis', 18, 1.5, 8], ['Mangga', 14, 1.5, 12], ['Durian', 10, 2.5, 24], ['Nanas', 6, 5, 60]]), { name: 'Wild', weight: 4, wild: true }, { name: 'Lonceng', weight: 10, scatter: true }],
+    wild: 6, scatter: 7, freeSpins: 8, freeMult: 2, retrigger: 8, scatterPay: 2 },
+  { id: 4, kind: 'tumble', name: 'Kakek Petir', short: 'KAKEK PETIR', edition: 'MESIN PETIR · VOL. 05', tagline: 'BAYAR DI MANA SAJA. PETIR MENGALI.', linesLabel: 'HITUNG SIMBOL · TUMBLE', help: '4+ simbol sama di mana saja membayar dan runtuh. Bola petir menaikkan pengali. 3+ gerbang: 10 putaran gratis dengan pengali abadi.', costMult: 3, hold: false,
+    symbols: [
+      { name: 'Biru', weight: 24, pays: [.4, .8, 2] }, { name: 'Delima', weight: 20, pays: [.5, 1, 2.5] },
+      { name: 'Cawan', weight: 16, pays: [.8, 1.5, 4] }, { name: 'Jam', weight: 12, pays: [1, 2, 6] },
+      { name: 'Cincin', weight: 8, pays: [1.5, 4, 10] }, { name: 'Mahkota', weight: 5, pays: [3, 8, 25] },
+      { name: 'Gerbang', weight: 6, scatter: true }, { name: 'Bola', weight: 4, orb: true },
+    ],
+    scatter: 6, freeSpins: 10, freeMult: 1, retrigger: 5, scatterPay: 0 },
+];
+export const ORB_VALUES = [2, 2, 2, 3, 3, 4, 5, 8];
+export const machineDef = (id: MachineId): MachineDef => MACHINES[id];
 export type Upgrade = 'payout' | 'hold' | 'turbo' | 'auto' | 'stamina' | 'efficient' | 'luck' | 'fare' | 'orders' | 'safety';
 export const UPGRADES: Record<Upgrade, { name: string; desc: string; base: number; max: number; icon: string }> = {
   luck: { name: 'Hoki Kecil', desc: 'Peluang bantuan kopi di hasil kosong (+8% per rank). Tidak mengubah peluang akhir cerita.', base: 18000, max: 3, icon: '♣' },
@@ -34,6 +64,7 @@ export interface StoryState {
 export type SlotIndex = 0 | 1 | 2;
 export interface SaveSettings { muted: boolean; reducedMotion: boolean; }
 export interface SaveBank { version: 6; activeSlot: SlotIndex; slots: [State | null, State | null, State | null]; settings: SaveSettings; }
+export interface FreeSpins { left: number; mult: number; won: number; }
 export interface EventRow {
   id: string;
   interrupt?: 'notify' | 'block';
@@ -45,16 +76,16 @@ export interface EventRow {
   when?: (state: State) => boolean;
 }
 export interface State {
-  version: 5; day: number; minutes: number; pityLosses: number; familyDebt: number; story: StoryState; cash: number; debt: number; spins: number; totalWon: number; bestWin: number;
-  insight: number; runs: number; bet: number; machine: 0 | 1 | 2; sultanUnlocked: boolean; cascadeUnlocked: boolean;
+  version: 6; day: number; minutes: number; pityLosses: number; familyDebt: number; story: StoryState; cash: number; debt: number; spins: number; totalWon: number; bestWin: number;
+  insight: number; runs: number; bet: number; machine: MachineId; sultanUnlocked: boolean; cascadeUnlocked: boolean; buahUnlocked: boolean; petirUnlocked: boolean; free: FreeSpins | null;
   upgrades: Record<Upgrade, number>; grid: Grid; charge: number; chargePool: number;
   canHold: boolean; ended: boolean; bill: number; logs: Entry[]; muted: boolean;
   turns: number; deliveries: number; workEarned: number; job: Job | null; loan: Loan | null; ending: string;
   winStreak: number;
 }
 export const fresh = (insight = 0, runs = 1): State => ({
-  version: 5, day: 1, minutes: 0, pityLosses: 0, familyDebt: 75000000, story: { intro: 0, guide: 0, view: 'room', read: [], finale: null, flags: [], fired: [], threads: {}, pending: [] }, cash: insight * 5000, debt: 75000, spins: 0, totalWon: 0, bestWin: 0,
-  insight, runs, bet: 1000, machine: 0, sultanUnlocked: false, cascadeUnlocked: false,
+  version: 6, day: 1, minutes: 0, pityLosses: 0, familyDebt: 75000000, story: { intro: 0, guide: 0, view: 'room', read: [], finale: null, flags: [], fired: [], threads: {}, pending: [] }, cash: insight * 5000, debt: 75000, spins: 0, totalWon: 0, bestWin: 0,
+  insight, runs, bet: 1000, machine: 0, sultanUnlocked: false, cascadeUnlocked: false, buahUnlocked: false, petirUnlocked: false, free: null,
   upgrades: { payout: 0, hold: 0, turbo: 0, auto: 0, stamina: 0, efficient: 0, luck: 0, fare: 0, orders: 0, safety: 0 }, grid: [[1, 0, 3], [2, 5, 0], [4, 1, 2]],
   charge: 0, chargePool: 0, canHold: false, ended: false, bill: 0, muted: false,
   turns: 0, deliveries: 0, workEarned: 0, job: null, loan: null, ending: '', winStreak: 0,
@@ -62,7 +93,7 @@ export const fresh = (insight = 0, runs = 1): State => ({
 });
 export const tier = (s: State) => Math.min(10, Math.floor(s.turns / 40));
 export const feeRate = (s: State) => tier(s) * .15;
-export const baseCost = (s: State) => s.bet * (s.machine ? 3 : 1);
+export const baseCost = (s: State) => s.bet * machineDef(s.machine).costMult;
 export const cost = (s: State) => Math.ceil(baseCost(s) * (100 + tier(s) * 15) / 100);
 export const minimumCost = (s: State) => 1000 + tier(s) * 150;
 export const multiplier = (s: State) => 1 + s.upgrades.payout * .25 + Math.min(s.insight, 25) * .02;
@@ -97,13 +128,17 @@ export const upgradeCost = (s: State, id: Upgrade) => Math.round(UPGRADES[id].ba
 export const UPGRADE_PARENTS: Partial<Record<Upgrade, Upgrade[]>> = { efficient: ['stamina'], luck: ['efficient'], hold: ['payout'], turbo: ['payout'], auto: ['hold', 'turbo'], orders: ['fare'], safety: ['orders'] };
 export const upgradePrerequisites = (s: State, id: Upgrade) => (UPGRADE_PARENTS[id] ?? []).every(parent => s.upgrades[parent] > 0);
 export const upgradeRequirement = (id: Upgrade) => (UPGRADE_PARENTS[id] ?? []).map(parent => UPGRADES[parent].name + ' I').join(' + ');
-export const machinePrice = (id: 1 | 2) => id === 1 ? 28000 : 42000;
-export function machineRequirement(s: State, id: 1 | 2): string {
+export const machinePrice = (id: 1 | 2 | 3 | 4) => id === 1 ? 28000 : id === 2 ? 42000 : id === 3 ? 32000 : 60000;
+export function machineRequirement(s: State, id: 1 | 2 | 3 | 4): string {
   const requirements: string[] = [];
-  if (s.spins < (id === 1 ? 30 : 60)) requirements.push(`${id === 1 ? 30 : 60} spin`);
+  const spinsNeeded = id === 1 ? 30 : id === 2 ? 60 : id === 3 ? 45 : 80;
+  if (s.spins < spinsNeeded) requirements.push(`${spinsNeeded} spin`);
   if (id === 1 && !s.upgrades.hold) requirements.push('Tahan Dulu I');
   if (id === 2 && !s.sultanUnlocked) requirements.push('Sultan Malam');
   if (id === 2 && s.upgrades.payout < 2) requirements.push('Pengali Cuan II');
+  if (id === 3 && s.upgrades.payout < 1) requirements.push('Pengali Cuan I');
+  if (id === 4 && !s.sultanUnlocked) requirements.push('Sultan Malam');
+  if (id === 4 && s.upgrades.payout < 2) requirements.push('Pengali Cuan II');
   return requirements.join(' + ');
 }
 export const insightEarned = (s: State) => Math.floor(s.spins / 40) + (s.sultanUnlocked ? 1 : 0) + (s.cascadeUnlocked ? 1 : 0);
@@ -112,13 +147,19 @@ export function randomSymbol(rng = Math.random): SymbolId {
   let n = rng() * 100;
   for (let i = 0; i < SYMBOLS.length; i++) { n -= SYMBOLS[i].weight; if (n < 0) return i as SymbolId; } return 5;
 }
+export function randomMachineSymbol(def: MachineDef, rng = Math.random): SymbolId {
+  const total = def.symbols.reduce((sum, s) => sum + s.weight, 0);
+  let n = rng() * total;
+  for (let i = 0; i < def.symbols.length; i++) { n -= def.symbols[i].weight; if (n < 0) return i as SymbolId; }
+  return (def.symbols.length - 1) as SymbolId;
+}
 // Soft pity only rewrites an otherwise empty initial grid. It never creates rare symbols.
 // Receh: coffee triple after a dry streak so the starter slot can refill you.
 // Sultan: coffee pair, a cheap consolation after a 3-line blank.
 // Rantai: coffee triple, the only result that machine pays.
 function pityChance(s: State): number {
   const luck = s.upgrades.luck * .08;
-  if (s.machine === 0) {
+  if (s.machine === 0 || s.machine === 3) {
     const streak = s.pityLosses >= 2 ? .20 + (s.pityLosses - 2) * .08 : 0;
     return Math.min(.50, streak + luck);
   }
@@ -126,15 +167,18 @@ function pityChance(s: State): number {
   return Math.min(.30, Math.min(.24, Math.max(0, s.pityLosses - 2) * .04) + luck);
 }
 function applySoftPity(s: State, grid: Grid, rng: () => number): void {
-  const eligibleRows = s.machine ? [0, 1, 2] : [1];
-  if (evaluate(grid, s.bet, eligibleRows, 1, s.machine === 2).length) return;
+  const empty = s.machine === 3 ? !evaluateFruit(grid, s.bet, 1).length && countScatter(grid, 7) < 3
+    : s.machine === 4 ? !evaluatePetir(grid, s.bet, 1).length && countScatter(grid, 6) < 3
+    : !evaluate(grid, s.bet, s.machine ? [0, 1, 2] : [1], 1, s.machine === 2).length;
+  if (!empty) return;
   const chance = pityChance(s);
   if (chance <= 0 || rng() >= chance) return;
+  if (s.machine === 4) { grid[0][0] = 0; grid[1][0] = 0; grid[2][0] = 0; grid[0][1] = 0; return; }
   grid[0][1] = 0;
   grid[1][1] = 0;
   grid[2][1] = s.machine === 1 ? 1 : 0;
 }
-export interface LineWin { row: number; symbol: SymbolId; count: number; amount: number; columns: number[]; }
+export interface LineWin { row: number; symbol: SymbolId; count: number; amount: number; columns: number[]; cells?: Array<[number, number]>; }
 export function evaluate(grid: Grid, bet: number, rows: number[], mult = 1, triplesOnly = false): LineWin[] {
   const wins: LineWin[] = [];
   for (const row of rows) for (let i = 0; i < SYMBOLS.length; i++) {
@@ -144,7 +188,7 @@ export function evaluate(grid: Grid, bet: number, rows: number[], mult = 1, trip
       amount: Math.round(bet * (columns.length === 3 ? SYMBOLS[i].triple : SYMBOLS[i].pair) * mult) });
   } return wins;
 }
-export interface Cascade { grid: Grid; wins: LineWin[]; factor: number; }
+export interface Cascade { grid: Grid; wins: LineWin[]; factor: number; orbSum?: number; }
 export function cascade(grid: Grid, bet: number, mult: number, rng = Math.random): Cascade[] {
   const steps: Cascade[] = []; let current = grid.map(c => [...c]);
   for (const factor of [1, 2, 4]) {
@@ -155,39 +199,138 @@ export function cascade(grid: Grid, bet: number, mult: number, rng = Math.random
     current = current.map(col => [...Array.from({ length: cleared.size }, () => randomSymbol(rng)), ...col.filter((_, y) => !cleared.has(y))]);
   } return steps;
 }
+export function countScatter(grid: Grid, scatter: number): number {
+  return grid.reduce((n, col) => n + col.filter(v => v === scatter).length, 0);
+}
+// Buah Berkah: 3-line wins where the golden durian substitutes any fruit.
+// Best-paying match wins each row.
+export function evaluateFruit(grid: Grid, bet: number, mult = 1): LineWin[] {
+  const def = MACHINES[3], wins: LineWin[] = [];
+  for (const row of [0, 1, 2]) {
+    let best: LineWin | null = null;
+    for (let i = 0; i < 6; i++) {
+      const columns = grid.flatMap((col, x) => (col[row] === i || col[row] === def.wild) ? [x] : []);
+      if (columns.length < 2) continue;
+      const amount = Math.round(bet * (columns.length === 3 ? def.symbols[i].triple! : def.symbols[i].pair!) * mult);
+      if (!best || amount > best.amount) best = { row, symbol: i as SymbolId, count: columns.length, columns, amount };
+    }
+    if (best) wins.push(best);
+  }
+  return wins;
+}
+// Kakek Petir: pay anywhere. 4/5/6+ of a kind anywhere on the 3x3 grid pays.
+export function evaluatePetir(grid: Grid, bet: number, mult = 1): LineWin[] {
+  const def = MACHINES[4], wins: LineWin[] = [];
+  for (let i = 0; i < 6; i++) {
+    const cells: Array<[number, number]> = [];
+    grid.forEach((col, x) => col.forEach((v, y) => { if (v === i) cells.push([x, y]); }));
+    if (cells.length < 4) continue;
+    const pay = def.symbols[i].pays![cells.length >= 6 ? 2 : cells.length === 5 ? 1 : 0];
+    wins.push({ row: -1, symbol: i as SymbolId, count: cells.length, columns: [...new Set(cells.map(([x]) => x))], cells,
+      amount: Math.round(bet * pay * mult) });
+  }
+  return wins;
+}
+export function orbCells(grid: Grid): Array<[number, number]> {
+  const cells: Array<[number, number]> = [];
+  grid.forEach((col, x) => col.forEach((v, y) => { if (v === 7) cells.push([x, y]); }));
+  return cells;
+}
+export function rollOrb(rng = Math.random): number {
+  return ORB_VALUES[Math.min(ORB_VALUES.length - 1, Math.floor(rng() * ORB_VALUES.length))];
+}
+// Thunder tumbles: winning groups plus charged orbs clear, symbols fall,
+// step multiplier grows. At most 6 steps. Orbs only charge while a win lands.
+export function tumblePetir(grid: Grid, bet: number, mult: number, rng = Math.random): { steps: Cascade[]; orbTotal: number } {
+  const steps: Cascade[] = []; let current = grid.map(c => [...c]); let orbTotal = 0;
+  for (let step = 0; step < 6; step++) {
+    const base = evaluatePetir(current, bet, 1);
+    const orbs = base.length ? orbCells(current).map(() => rollOrb(rng)) : [];
+    const orbSum = orbs.reduce((a, b) => a + b, 0); orbTotal += orbSum;
+    const factor = mult * (1 + step) + orbSum;
+    const wins = base.map(w => ({ ...w, amount: Math.round(bet * MACHINES[4].symbols[w.symbol].pays![w.count >= 6 ? 2 : w.count === 5 ? 1 : 0] * factor) }));
+    steps.push({ grid: current.map(c => [...c]), wins, factor, orbSum });
+    if (!wins.length) break;
+    const clear = new Set(wins.flatMap(w => w.cells!.map(([x, y]) => x + ',' + y)));
+    for (const [x, y] of orbCells(current)) clear.add(x + ',' + y);
+    current = current.map((col, x) => {
+      const kept = col.filter((_, y) => !clear.has(x + ',' + y));
+      return [...Array.from({ length: 3 - kept.length }, () => randomMachineSymbol(MACHINES[4], rng)), ...kept];
+    });
+  }
+  return { steps, orbTotal };
+}
 export function advanceTime(s: State, n: number) {
   if (!s.ended) s.turns += n;
 }
-export interface SpinResult { grid: Grid; wins: LineWin[]; payout: number; bonus: number; paid: number; billDue: number; held: number | null; cascades: Cascade[]; }
+export interface SpinResult { grid: Grid; wins: LineWin[]; payout: number; bonus: number; paid: number; billDue: number; held: number | null; cascades: Cascade[]; scatters: number; freeUsed: boolean; freeLeft: number; freeTriggered: boolean; freeRetrigger: boolean; freeEnded: boolean; freeWon: number; }
 export function spin(s: State, held: number | null = null, rng = Math.random): SpinResult | null {
   queueDueEvents(s);
-  if (blocked(s) || remainingTime(s) < spinMinutes(s) || s.cash < cost(s)) return null;
-  if (held !== null && (s.machine === 2 || !Number.isInteger(held) || held < 0 || held > 2 || !s.canHold || !s.upgrades.hold)) return null;
-  const paid = cost(s); s.cash -= paid; s.minutes += spinMinutes(s);
-  const initial = Array.from({ length: 3 }, (_, x) => x === held ? [...s.grid[x]] : Array.from({ length: 3 }, () => randomSymbol(rng))) as Grid;
+  const def = machineDef(s.machine);
+  const usingFree = !!s.free && s.free.left > 0;
+  let paid = 0, mult = multiplier(s);
+  if (usingFree) {
+    if (s.ended || s.job || s.story.finale) return null;
+    s.free!.left--; mult = s.free!.mult;
+  } else {
+    if (s.free) s.free = null;
+    if (blocked(s) || remainingTime(s) < spinMinutes(s) || s.cash < cost(s)) return null;
+    if (held !== null && (!def.hold || !Number.isInteger(held) || held < 0 || held > 2 || !s.canHold || !s.upgrades.hold)) return null;
+    paid = cost(s); s.cash -= paid; s.minutes += spinMinutes(s);
+  }
+  const initial = Array.from({ length: 3 }, (_, x) => x === held ? [...s.grid[x]] : Array.from({ length: 3 }, () => s.machine <= 2 ? randomSymbol(rng) : randomMachineSymbol(def, rng))) as Grid;
   applySoftPity(s, initial, rng);
-  const cascades = s.machine === 2 ? cascade(initial, s.bet, multiplier(s), rng) : [];
-  const wins = s.machine === 2 ? cascades.flatMap(c => c.wins) : evaluate(initial, s.bet, s.machine === 1 ? [0, 1, 2] : [1], multiplier(s));
-  const payout = wins.reduce((sum, w) => sum + w.amount, 0);
+  let wins: LineWin[] = [], cascades: Cascade[] = [], scatters = 0, orbTotal = 0;
+  if (s.machine === 2) {
+    cascades = cascade(initial, s.bet, mult, rng);
+    wins = cascades.flatMap(c => c.wins);
+  } else if (s.machine === 3) {
+    wins = evaluateFruit(initial, s.bet, mult);
+    scatters = countScatter(initial, def.scatter!);
+  } else if (s.machine === 4) {
+    const t = tumblePetir(initial, s.bet, mult, rng);
+    cascades = t.steps; wins = cascades.flatMap(c => c.wins); orbTotal = t.orbTotal;
+    scatters = countScatter(initial, def.scatter!);
+  } else {
+    wins = evaluate(initial, s.bet, s.machine === 1 ? [0, 1, 2] : [1], mult);
+  }
+  let payout = wins.reduce((sum, w) => sum + w.amount, 0);
+  let freeTriggered = false, freeRetrigger = false;
+  if (scatters >= 3 && (s.machine === 3 || s.machine === 4)) {
+    payout += Math.round(s.bet * def.scatterPay * mult);
+    if (!s.free) { s.free = { left: 0, mult: def.freeMult, won: 0 }; freeTriggered = true; }
+    else freeRetrigger = true;
+    s.free.left += usingFree || freeRetrigger ? def.retrigger : def.freeSpins;
+    const scatterName = def.symbols[def.scatter!].name.toUpperCase();
+    log(s, `${scatters}× ${scatterName}! ${usingFree || freeRetrigger ? `+${def.retrigger} putaran gratis.` : `${def.freeSpins} PUTARAN GRATIS berpengali ${def.freeMult}×!`}`, 'win');
+  }
+  if (usingFree && s.machine === 4 && orbTotal) s.free!.mult += orbTotal;
   const bonus = 0; s.pityLosses = payout ? 0 : Math.min(50, s.pityLosses + 1);
   const grid = cascades.length ? cascades[cascades.length - 1].grid : initial;
-  s.cash += payout + bonus; s.totalWon += payout + bonus; s.bestWin = Math.max(s.bestWin, payout + bonus);
-  s.grid = grid; s.spins++; s.canHold = held === null && s.machine !== 2; advanceTime(s, 1);
+  s.cash += payout; s.totalWon += payout; s.bestWin = Math.max(s.bestWin, payout);
+  s.grid = grid; s.spins++; s.canHold = held === null && def.hold; advanceTime(s, 1);
   if (s.machine === 0 && payout) s.winStreak++;
   else s.winStreak = 0;
-  if (payout || bonus) log(s, `${cascades.length > 1 ? `Rantai ${cascades.length} tahap!` : wins.some(w => w.count === 3) ? 'Tiga serangkai!' : 'Dua cocok'} +Rp${(payout + bonus).toLocaleString('id-ID')}`, 'win');
+  let freeEnded = false, freeWon = 0;
+  if (usingFree && s.free) {
+    s.free.won += payout;
+    if (s.free.left <= 0) { freeEnded = true; freeWon = s.free.won; s.free = null; log(s, `Putaran gratis selesai. Total +Rp${freeWon.toLocaleString('id-ID')}.`, 'win'); }
+  }
+  if (payout || bonus) log(s, `${cascades.length > 1 ? `${s.machine === 4 ? 'Petir' : 'Rantai'} ${cascades.length} tahap!` : wins.some(w => w.count === 3) ? 'Tiga serangkai!' : 'Dua cocok'} +Rp${(payout + bonus).toLocaleString('id-ID')}`, 'win');
   queueDueEvents(s);
-  return { grid, wins, payout, bonus, paid, billDue: s.bill, held, cascades };
+  return { grid, wins, payout, bonus, paid, billDue: s.bill, held, cascades, scatters, freeUsed: usingFree, freeLeft: s.free ? s.free.left : 0, freeTriggered, freeRetrigger, freeEnded, freeWon };
 }
 export function buyUpgrade(s: State, id: Upgrade): boolean {
   if (!UPGRADES[id] || !upgradePrerequisites(s, id) || blocked(s) || s.upgrades[id] >= UPGRADES[id].max || s.cash < upgradeCost(s, id)) return false;
   s.cash -= upgradeCost(s, id); s.upgrades[id]++; log(s, `${UPGRADES[id].name} dipasang.`); return true;
 }
 export function unlockSultan(s: State): boolean { return unlockMachine(s, 1); }
-export function unlockMachine(s: State, id: 1 | 2): boolean {
-  const key = id === 1 ? 'sultanUnlocked' : 'cascadeUnlocked', price = machinePrice(id);
+const MACHINE_KEYS = [null, 'sultanUnlocked', 'cascadeUnlocked', 'buahUnlocked', 'petirUnlocked'] as const;
+const MACHINE_OPEN_COPY = [null, 'Sultan Malam terbuka. Tiga jalur.', 'Rantai Rejeki terbuka. Tripel runtuh, pengali tumbuh.', 'Buah Berkah terbuka. Durian emas menggantikan semua buah.', 'Kakek Petir terbuka. Gerbang memanggil putaran gratis.'] as const;
+export function unlockMachine(s: State, id: 1 | 2 | 3 | 4): boolean {
+  const key = MACHINE_KEYS[id]!, price = machinePrice(id);
   if (blocked(s) || s[key] || machineRequirement(s, id) || s.cash < price) return false;
-  s.cash -= price; s[key] = true; log(s, id === 1 ? 'Sultan Malam terbuka. Tiga jalur.' : 'Rantai Rejeki terbuka. Tripel runtuh, pengali tumbuh.'); return true;
+  s.cash -= price; s[key] = true; log(s, MACHINE_OPEN_COPY[id]!); return true;
 }
 export function payBill(s: State): boolean {
   if (!s.bill || s.cash < s.bill || s.ended || s.story.finale || s.job) return false;
@@ -254,10 +397,10 @@ export function prestige(s: State): State {
 }
 export const SAVE_KEY = 'besok-lunas-v1'; // Stable key so v1 saves can migrate in place.
 export function parseSave(raw: string | null): State | null {
-  if (!raw) return null;
+    if (!raw) return null;
   try {
     const input = JSON.parse(raw);
-    if (![1, 2, 3, 4, 5].includes(input.version)) return null;
+    if (![1, 2, 3, 4, 5, 6].includes(input.version)) return null;
     if (input.version === 1) Object.assign(input, { version: 2, turns: input.spins, deliveries: 0, workEarned: 0, job: null, loan: null, ending: '', cascadeUnlocked: false, chargePool: input.charge * input.bet });
     if (input.version === 2) Object.assign(input, { version: 3, day: 1, minutes: 0, pityLosses: 0, familyDebt: 75000000, story: { intro: 0, guide: input.deliveries > 0 ? 1 : 0, view: 'room', read: [], finale: null, flags: [], fired: [], threads: {}, pending: [] } });
     if (input.version === 3) {
@@ -271,14 +414,20 @@ export function parseSave(raw: string | null): State | null {
       input.upgrades = { ...input.upgrades, luck: 0, fare: 0, orders: 0, safety: 0 };
       if (input.job) input.job.damage = 600;
     }
+    if (input.version === 5) {
+      input.version = 6;
+      input.buahUnlocked = false; input.petirUnlocked = false; input.free = null;
+    }
     const s = input as State;
     for (const key of ['day', 'minutes', 'pityLosses', 'familyDebt', 'cash', 'debt', 'spins', 'totalWon', 'bestWin', 'insight', 'runs', 'charge', 'chargePool', 'bill', 'turns', 'deliveries', 'workEarned'] as const)
       if (!Number.isSafeInteger(s[key]) || s[key] < 0) return null;
-    if (s.runs < 1 || s.day < 1 || s.minutes > dayCapacity(s) || s.pityLosses > 50 || s.charge > 5 || s.bill > s.debt || ![1000, 2000, 5000].includes(s.bet) || ![0, 1, 2].includes(s.machine)) return null;
-    if (!s.grid || s.grid.length !== 3 || s.grid.some(c => !Array.isArray(c) || c.length !== 3 || c.some(v => !Number.isInteger(v) || v < 0 || v > 5))) return null;
+    if (s.runs < 1 || s.day < 1 || s.minutes > dayCapacity(s) || s.pityLosses > 50 || s.charge > 5 || s.bill > s.debt || ![1000, 2000, 5000].includes(s.bet) || ![0, 1, 2, 3, 4].includes(s.machine)) return null;
+    if (!s.grid || s.grid.length !== 3 || s.grid.some(c => !Array.isArray(c) || c.length !== 3 || c.some(v => !Number.isInteger(v) || v < 0 || v > 7))) return null;
     if (!s.upgrades || Object.entries(UPGRADES).some(([k, v]) => !Number.isInteger(s.upgrades[k as Upgrade]) || s.upgrades[k as Upgrade] < 0 || s.upgrades[k as Upgrade] > v.max)) return null;
-    for (const key of ['ended', 'canHold', 'sultanUnlocked', 'cascadeUnlocked', 'muted'] as const) if (typeof s[key] !== 'boolean') return null;
-    if (typeof s.ending !== 'string' || (s.machine === 1 && !s.sultanUnlocked) || (s.machine === 2 && !s.cascadeUnlocked)) return null;
+    for (const key of ['ended', 'canHold', 'sultanUnlocked', 'cascadeUnlocked', 'buahUnlocked', 'petirUnlocked', 'muted'] as const) if (typeof s[key] !== 'boolean') return null;
+    if (typeof s.ending !== 'string' || (s.machine === 1 && !s.sultanUnlocked) || (s.machine === 2 && !s.cascadeUnlocked) || (s.machine === 3 && !s.buahUnlocked) || (s.machine === 4 && !s.petirUnlocked)) return null;
+    if (s.free === undefined) s.free = null;
+    else if (s.free !== null && (!s.free || !Number.isSafeInteger(s.free.left) || s.free.left < 0 || s.free.left > 200 || typeof s.free.mult !== 'number' || !(s.free.mult >= 1) || !Number.isSafeInteger(s.free.won) || s.free.won < 0)) return null;
     if (s.job !== null) {
       const j = s.job;
       if (!j || !Number.isInteger(j.step) || j.step < 0 || j.step >= ROAD_LENGTH || ![0,1,2].includes(j.lane) || ![j.fare,j.fuel,j.net,j.hits,j.orders,j.damage].every(n => Number.isSafeInteger(n) && n >= 0) || j.damage < 300 || j.damage > 600 || j.damage % 150 !== 0 || j.net !== j.fare-j.fuel || j.hits>j.step || j.orders>j.step || !Array.isArray(j.rows) || j.rows.length!==ROAD_LENGTH || j.rows.some(r => !r || !Array.isArray(r.obstacles) || r.obstacles.length>2 || new Set(r.obstacles).size!==r.obstacles.length || r.obstacles.some(l=>![0,1,2].includes(l)) || (r.order!==null && (![0,1,2].includes(r.order) || r.obstacles.includes(r.order))))) return null;
@@ -317,7 +466,7 @@ export function parseBank(raw: string | null): SaveBank | null {
   if (!raw) return null;
   try {
     const input = JSON.parse(raw) as { version?: unknown; activeSlot?: unknown; slots?: unknown; settings?: { muted?: unknown; reducedMotion?: unknown } };
-    if (input?.version === 6) {
+    if (input?.version === 6 && Array.isArray(input.slots)) {
       if (![0, 1, 2].includes(input.activeSlot as number)) return null;
       const settings = input.settings;
       if (!settings || typeof settings.muted !== 'boolean' || typeof settings.reducedMotion !== 'boolean') return null;

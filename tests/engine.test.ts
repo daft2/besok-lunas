@@ -161,7 +161,7 @@ test('pity survives saving and does not introduce a separate cash bonus',()=>{
 
 test('legacy saves migrate to calendar without erasing money, upgrades or loan balance',()=>{
  const s=fresh();s.spins=45;s.upgrades.hold=1;
- const migrated=parseSave(JSON.stringify({...s,version:1}))!;assert.equal(migrated.version,5);assert.equal(migrated.cash,45000);assert.equal(migrated.turns,45);assert.equal(migrated.upgrades.hold,1);
+ const migrated=parseSave(JSON.stringify({...s,version:1}))!;assert.equal(migrated.version,6);assert.equal(migrated.cash,45000);assert.equal(migrated.turns,45);assert.equal(migrated.upgrades.hold,1);
  const legacy={...s,version:3,turns:46,loan:{principal:10000,interest:2000,balance:14520,due:20,nextLate:50,lateCount:2,fees:2520}};
  const m=parseSave(JSON.stringify(legacy))!;assert.equal(m.loan!.balance,14520);assert.equal(m.loan!.due,1);assert.equal(m.day,1);
  assert.equal(parseSave(JSON.stringify({...s,minutes:9999})),null);
@@ -277,7 +277,7 @@ test('v4 saves preserve owned upgrades and current road while adding new branch 
  const s=fresh();s.upgrades.hold=1;s.cascadeUnlocked=true;startJob(s,()=>.5);
  const old=JSON.parse(JSON.stringify(s));old.version=4;
  for(const key of ['luck','fare','orders','safety'])delete old.upgrades[key];delete old.job.damage;
- const restored=parseSave(JSON.stringify(old))!;assert.equal(restored.version,5);assert.equal(restored.upgrades.hold,1);
+ const restored=parseSave(JSON.stringify(old))!;assert.equal(restored.version,6);assert.equal(restored.upgrades.hold,1);
  assert.equal(restored.cascadeUnlocked,true);assert.equal(restored.job!.damage,600);assert.equal(restored.upgrades.fare,0);
  assert.deepEqual(restored.job!.rows,s.job!.rows);assert.equal(restored.cash,s.cash);
 });
@@ -289,7 +289,7 @@ test('v5 raw state becomes a bank with slot 0 filled', () => {
   delete raw.story.flags; delete raw.story.fired; delete raw.story.threads; delete raw.story.pending;
   const payload = JSON.stringify(raw);
   const migrated = parseSave(payload)!;
-  assert.equal(migrated.version, 5);
+  assert.equal(migrated.version, 6);
   assert.deepEqual(migrated.story.flags, []);
   assert.deepEqual(migrated.story.fired, []);
   assert.deepEqual(migrated.story.pending, []);
@@ -460,7 +460,7 @@ test('parseSave fills missing winStreak without bumping the run version', () => 
   const raw = JSON.parse(JSON.stringify(s)) as { version: number; winStreak?: number };
   delete raw.winStreak;
   const restored = parseSave(JSON.stringify(raw))!;
-  assert.equal(restored.version, 5);
+  assert.equal(restored.version, 6);
   assert.equal(restored.winStreak, 0);
   assert.equal(parseSave(JSON.stringify({ ...s, winStreak: -1 })), null);
 });

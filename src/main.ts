@@ -6,7 +6,7 @@ import '@fontsource/barlow/latin-900.css';
 import '@fontsource/barlow-condensed/latin-800.css';
 import '@fontsource/barlow-condensed/latin-900.css';
 import './style.css';
-import { fresh, spin, cost, multiplier, upgradeCost, buyUpgrade, payBill, endRun, prestige, insightEarned, parseBank, wrapState, SAVE_KEY, SYMBOLS, UPGRADES, machineRequirement, machinePrice, type State, type SaveBank, type Upgrade, tier, feeRate, baseCost, minimumCost, totalDebt, loanDue, blocked as engineBlocked, nextBill, unlockMachine, LOAN_AMOUNTS, quoteLoan, borrow, repayLoan, jobQuote, startJob, jobStep, remainingTime, spinMinutes, jobMinutes, canWork, endDay, dailyObligations, clockTime, finaleReady, beginFinale, revealFinale, FINALE_COST } from './engine';
+import { fresh, spin, cost, multiplier, upgradeCost, buyUpgrade, payBill, endRun, prestige, insightEarned, parseBank, wrapState, SAVE_KEY, SYMBOLS, UPGRADES, MACHINES, machineDef, machineRequirement, machinePrice, type State, type SaveBank, type Upgrade, type MachineId, tier, feeRate, baseCost, minimumCost, totalDebt, loanDue, blocked as engineBlocked, nextBill, unlockMachine, LOAN_AMOUNTS, quoteLoan, borrow, repayLoan, jobQuote, startJob, jobStep, remainingTime, spinMinutes, jobMinutes, canWork, endDay, dailyObligations, clockTime, finaleReady, beginFinale, revealFinale, FINALE_COST } from './engine';
 import { GameShell, emptyBank, menuState, applyReducedMotion } from './menu';
 import { createReels, type ReelScene } from './reels';
 import { GameAudio } from './audio';
@@ -69,7 +69,7 @@ $('app').innerHTML = `
       <section class="center-panel tab-panel active" data-panel="machine">
         <div id="first-spin-tip" class="first-spin-tip" hidden><b>03 · PUTARAN PERTAMA</b><span>Tekan PUTAR yang disorot. Dua simbol sama di garis tengah membayar. Setiap spin memakai uang dan waktu; lihat jam di atas.</span></div><div class="life-actions"><button id="ojol"><span class="symbol-art s2"></span><span><b>NARIK OJOL</b><small id="ojol-label">Cari modal dulu</small></span><i>↗</i></button><button id="pinjol"><span class="finance-icon">Rp</span><span><b>PINJOL</b><small id="loan-label">Cair cepat. Bayar berat.</small></span><i>↗</i></button></div>
         <div class="pressure-strip"><strong id="pressure"></strong><span id="pressure-next"></span></div>
-        <div class="machine-switch"><button id="receh-tab" class="machine-tab selected">01 <b>RECEH REJEKI</b></button><button id="sultan-tab" class="machine-tab">02 <b>SULTAN MALAM</b><span id="sultan-lock">⌑</span></button><button id="cascade-tab" class="machine-tab">03 <b>RANTAI REJEKI</b><span id="cascade-lock">⌑</span></button></div>
+        <div class="machine-switch"><button id="receh-tab" class="machine-tab selected">01 <b>RECEH REJEKI</b></button><button id="sultan-tab" class="machine-tab">02 <b>SULTAN MALAM</b><span id="sultan-lock">⌑</span></button><button id="cascade-tab" class="machine-tab">03 <b>RANTAI REJEKI</b><span id="cascade-lock">⌑</span></button><button id="buah-tab" class="machine-tab">04 <b>BUAH BERKAH</b><span id="buah-lock">⌑</span></button><button id="petir-tab" class="machine-tab">05 <b>KAKEK PETIR</b><span id="petir-lock">⌑</span></button></div>
         <div class="cabinet" id="cabinet">
           <div class="machine-top"><span class="screw">+</span><span class="machine-edition" id="machine-edition">MESIN RAKYAT · VOL. 01</span><span class="screw">+</span></div>
           <div class="marquee"><span class="marquee-star">✦</span><div><h1 id="machine-name">RECEH REJEKI</h1><p id="machine-subtitle">MODAL RECEH, MIMPI GEDE.</p></div><span class="marquee-star">✦</span></div>
@@ -124,8 +124,8 @@ function render() {
   $('deadline').textContent = state.debt === 0 ? 'Lunas' : state.bill ? 'Sekarang' : `Akhir hari ${state.day + (3 - state.day % 3)}`;
   $('bill-progress').style.width = `${state.bill ? 100 : state.day % 3 / 3 * 100}%`;
   document.querySelector('.stamp')!.textContent = state.debt === 0 ? 'LUNAS…?' : 'BELUM LUNAS';
-  $('bet').textContent = money(state.bet); $('spin-cost').textContent = `${money(cost(state))} / ${held === null ? 'SPIN' : 'RESPIN'}`;
-  $('spin-label').textContent = busy ? 'BERPUTAR…' : held === null ? 'PUTAR' : 'PUTAR ULANG';
+  $('bet').textContent = money(state.bet); $('spin-cost').textContent = state.free && state.free.left > 0 ? 'TANPA BIAYA' : `${money(cost(state))} / ${held === null ? 'SPIN' : 'RESPIN'}`;
+  $('spin-label').textContent = busy ? 'BERPUTAR…' : held !== null ? 'PUTAR ULANG' : state.free && state.free.left > 0 ? 'PUTAR GRATIS' : 'PUTAR';
   const blocked = busy || engineBlocked(state);
   setButton('spin', blocked || remainingTime(state)<spinMinutes(state) || !scene || state.cash < cost(state));
   setButton('bet-down', blocked || state.bet === 1000); setButton('bet-up', blocked || state.bet === 5000);
@@ -133,23 +133,30 @@ function render() {
   setButton('auto', engineBlocked(state) || remainingTime(state)<spinMinutes(state));
   $('speed').textContent = `${(1 / (1 - state.upgrades.turbo * .25)).toFixed(1)}×`;
   for (let i = 0; i < 3; i++) {
-    setButton(`hold-${i}`, blocked || state.machine === 2 || !state.upgrades.hold || !state.canHold || auto);
+    setButton(`hold-${i}`, blocked || state.machine === 2 || state.machine === 4 || !state.upgrades.hold || !state.canHold || auto);
     $(`hold-${i}`).classList.toggle('held', held === i); $(`hold-${i}`).setAttribute('aria-pressed', String(held === i));
     $(`hold-${i}`).title = !state.upgrades.hold ? 'Beli Tahan Dulu di Bengkel' : !state.canHold ? 'Tersedia setelah spin biasa. Satu respin per putaran.' : 'Tahan seluruh kolom ini untuk satu respin berbayar';
   }
   $('payout-mult').textContent = `${multiplier(state).toFixed(2)}× HADIAH`;
-  $('machine-name').textContent = ['RECEH REJEKI', 'SULTAN MALAM', 'RANTAI REJEKI'][state.machine];
-  $('machine-edition').textContent = ['MESIN RAKYAT · VOL. 01', 'MESIN SULTAN · VOL. 02', 'MESIN CASCADE · VOL. 03'][state.machine];
-  $('machine-subtitle').textContent = ['MODAL RECEH, MIMPI GEDE.', 'TIGA GARIS. TIGA KALI NEKAT.', 'TRIPEL RUNTUH. PENGALI TUMBUH.'][state.machine];
-  $('machine-lines').textContent = ['1 GARIS AKTIF', '3 GARIS AKTIF', 'TRIPEL → 1× / 2× / 4×'][state.machine];
-  document.querySelector('.paytable p')!.textContent = state.machine === 2 ? 'Tripel · sebelum pengali tahap & upgrade' : '3 simbol sama · pengali taruhan';
-  document.querySelectorAll('.symbol-table b').forEach((el, i) => el.textContent = `${SYMBOLS[i].triple * (state.machine === 2 ? 1.5 : 1)}×`);
-  document.querySelector('.pair-note')!.textContent = state.machine === 2 ? 'Hanya tripel. Tahap 1× → 2× → 4×.' : '2 simbol sama juga bayar.';
+  const def = machineDef(state.machine);
+  $('machine-name').textContent = def.short;
+  $('machine-edition').textContent = def.edition;
+  $('machine-subtitle').textContent = def.tagline;
+  $('machine-lines').textContent = state.free && state.free.left > 0 ? `GRATIS ×${state.free.left} · PENGALI ${state.free.mult}×` : def.linesLabel;
+  const artClass = state.machine <= 2 ? 'symbol-art' : state.machine === 3 ? 'buah-art' : 'petir-art';
+  const cellClass = (i: number) => state.machine <= 2 ? `s${i}` : state.machine === 3 ? `b${i}` : `p${i}`;
+  document.querySelector('.symbol-table')!.innerHTML = def.symbols.map((s, i) => `<div><span class="${artClass} ${cellClass(i)}" role="img" aria-label="${s.name}"></span><b>${s.triple ?? s.pays![2]}×</b></div>`).join('');
+  document.querySelector('.symbol-table')!.classList.toggle('wide', def.symbols.length > 6);
+  document.querySelector('.paytable p')!.textContent = state.machine === 2 ? 'Tripel · sebelum pengali tahap & upgrade' : state.machine === 3 ? 'Tripel buah · wild menggantikan' : state.machine === 4 ? 'Hitung simbol · bayar 4 / 5 / 6+' : '3 simbol sama · pengali taruhan';
+  document.querySelector('.pair-note')!.textContent = state.machine === 2 ? 'Hanya tripel. Tahap 1× → 2× → 4×.' : state.machine === 3 ? 'Durian emas = wild. 3+ lonceng = gratis.' : state.machine === 4 ? 'Bola petir mengali. 3+ gerbang = gratis.' : '2 simbol sama juga bayar.';
   $('cabinet').classList.toggle('sultan', state.machine === 1); $('cabinet').classList.toggle('cascade', state.machine === 2);
-  $('receh-tab').classList.toggle('selected', state.machine === 0); $('sultan-tab').classList.toggle('selected', state.machine === 1);
+  $('cabinet').classList.toggle('buah', state.machine === 3); $('cabinet').classList.toggle('petir', state.machine === 4);
+  const tabIds = ['receh-tab', 'sultan-tab', 'cascade-tab', 'buah-tab', 'petir-tab'] as const;
+  tabIds.forEach((id, i) => { $(id).classList.toggle('selected', state.machine === i); setButton(id, blocked); });
   $('sultan-lock').textContent = state.sultanUnlocked ? '' : '⌑';
-  setButton('receh-tab', blocked); setButton('sultan-tab', blocked); setButton('cascade-tab', blocked);
-  $('cascade-tab').classList.toggle('selected', state.machine === 2); $('cascade-lock').textContent = state.cascadeUnlocked ? '' : '⌑';
+  $('cascade-lock').textContent = state.cascadeUnlocked ? '' : '⌑';
+  $('buah-lock').textContent = state.buahUnlocked ? '' : '⌑';
+  $('petir-lock').textContent = state.petirUnlocked ? '' : '⌑';
   $('pressure').textContent = `TEKANAN ${tier(state) + 1} · BIAYA MESIN +${Math.round(feeRate(state) * 100)}%`;
   $('pressure-next').textContent = tier(state) < 10 ? `${40 - state.turns % 40} poin tekanan → naik` : 'Tekanan maksimum';
   $('ojol-label').textContent = state.job ? 'Lanjutkan order aktif' : `Bersih ${money(jobQuote(state).net)} / order`;
@@ -204,37 +211,56 @@ async function doSpin() {
   if (!result) { stopAuto(); audio.play('error'); checkAfterSpin(); return; }
   busy = true; held = null; state.story.guide = 3; save(); render(); audio.play('spin');
   $('result').classList.remove('winning'); $('result').innerHTML = '<strong>REJEKI LAGI DIPUTAR…</strong><span>Yang pasti cuma biaya spinnya.</span>';
-  try { await scene.animate(result, state.upgrades.turbo, () => audio.play('stop'), factor => { $('result').innerHTML = `<strong>RANTAI ${factor}×</strong><span>Tripel pecah. Simbol baru turun.</span>`; }); }
+  const machineId = state.machine;
+  try { await scene.animate(result, state.upgrades.turbo, () => audio.play('stop'), factor => { $('result').innerHTML = machineId === 4 ? `<strong>PETIR ×${factor}</strong><span>Simbol pecah. Petir menyambar lagi.</span>` : `<strong>RANTAI ${factor}×</strong><span>Tripel pecah. Simbol baru turun.</span>`; }); }
   finally { busy = false; }
   const amount = result.payout + result.bonus;
-  const centerNames = result.grid.map(c => SYMBOLS[c[1]].name).join(' · ');
+  const names = MACHINES[state.machine].symbols;
+  const centerNames = result.grid.map(c => names[c[1]].name).join(' · ');
   $('reels').setAttribute('aria-label', `Garis tengah: ${centerNames}. Total hadiah ${money(amount)}.`);
   if (amount) {
     audio.play('win'); $('result').classList.add('winning');
-    $('result').innerHTML = `<strong>+${money(amount)}</strong><span>${amount > result.paid ? `Bersih +${money(amount - result.paid)}.` : amount === result.paid ? 'Balik modal. Belum balik nasib.' : `Setelah biaya spin: −${money(result.paid - amount)}.`} ${result.cascades.length > 1 ? 'RANTAI ' + result.cascades.length + ' TAHAP!' : result.wins.some(w => w.count === 3) ? 'TIGA SERANGKAI!' : ''}</span>`;
+    const extras = [result.scatters >= 3 ? 'SCATTER!' : '', result.cascades.length > 1 ? (state.machine === 4 ? `TUMBLE ${result.cascades.length} TAHAP!` : 'RANTAI ' + result.cascades.length + ' TAHAP!') : '', result.wins.some(w => w.count === 3) ? 'TIGA SERANGKAI!' : ''].filter(Boolean).join(' ');
+    const freeNote = result.freeEnded ? ` Putaran gratis selesai: +${money(result.freeWon)}.` : result.freeUsed ? ` Gratis ×${result.freeLeft} tersisa.` : result.freeTriggered ? ' PUTARAN GRATIS DIMULAI!' : '';
+    $('result').innerHTML = `<strong>+${money(amount)}</strong><span>${amount > result.paid ? `Bersih +${money(amount - result.paid)}.` : amount === result.paid ? 'Balik modal. Belum balik nasib.' : `Setelah biaya spin: −${money(result.paid - amount)}.`} ${extras}${freeNote}</span>`;
   } else $('result').innerHTML = `<strong>BELUM REJEKI.</strong><span>${centerNames}. Belum ada yang cocok.</span>`;
   render(); checkAfterSpin();
   if (auto && !engineBlocked(state) && !document.hidden) autoTimer = setTimeout(() => void doSpin(), 650);
 }
-function setMachine(mode: 0 | 1 | 2) {
+function setMachine(mode: MachineId) {
   if (busy || engineBlocked(state)) return;
-  if (mode && !(mode === 1 ? state.sultanUnlocked : state.cascadeUnlocked)) {
-    const requirement=machineRequirement(state,mode);
-    const needed = mode === 1 ? 30 : 60, price = machinePrice(mode);
-    showModal(`<div class="eyebrow">MESIN 0${mode + 1}</div><h2>${mode === 1 ? 'Sultan Malam' : 'Rantai Rejeki'}</h2><p>${mode === 1 ? 'Tiga garis horizontal membayar sekaligus. Pasangan dan tripel membayar.' : 'Hanya tiga simbol sama dalam satu baris yang membayar, sebesar 1,5× hadiah tripel biasa. Baris menang runtuh dan diisi simbol baru. Maksimal tiga tahap: pengali 1× → 2× → 4×. Tanpa hold.'}</p><p>Biaya: 3× taruhan per spin, ditambah biaya tekanan yang terlihat di atas mesin.</p><p class="tree-requirement">${requirement?'Perlu: '+requirement:'Prasyarat terpenuhi.'}</p><div class="unlock-conditions"><span>${state.spins >= needed ? '✓' : '○'} Mainkan ${needed} spin (${Math.min(state.spins, needed)}/${needed})</span><span>${state.cash >= price ? '✓' : '○'} Biaya buka ${money(price)}</span></div><button class="primary-button" data-action="unlock" data-machine="${mode}" ${requirement || state.cash < price ? 'disabled' : ''}>BUKA MESIN</button>`); return;
+  if (state.free && state.free.left > 0) { toast('Habiskan putaran gratis dulu sebelum pindah mesin.'); return; }
+  const owned = [true, state.sultanUnlocked, state.cascadeUnlocked, state.buahUnlocked, state.petirUnlocked][mode];
+  if (mode && !owned) {
+    const def = machineDef(mode), requirement = machineRequirement(state, mode);
+    const needed = [0, 30, 60, 45, 80][mode], price = machinePrice(mode as 1 | 2 | 3 | 4);
+    showModal(`<div class="eyebrow">MESIN 0${mode + 1}</div><h2>${def.name}</h2><p>${def.help}</p><p>Biaya: ${def.costMult}× taruhan per spin, ditambah biaya tekanan yang terlihat di atas mesin.</p><p class="tree-requirement">${requirement ? 'Perlu: ' + requirement : 'Prasyarat terpenuhi.'}</p><div class="unlock-conditions"><span>${state.spins >= needed ? '✓' : '○'} Mainkan ${needed} spin (${Math.min(state.spins, needed)}/${needed})</span><span>${state.cash >= price ? '✓' : '○'} Biaya buka ${money(price)}</span></div><button class="primary-button" data-action="unlock" data-machine="${mode}" ${requirement || state.cash < price ? 'disabled' : ''}>BUKA MESIN</button>`); return;
   }
-  stopAuto(); held = null; state.canHold = false; state.machine = mode; scene?.setMode(mode); save(); render();
+  stopAuto(); held = null; state.canHold = false; state.machine = mode; scene?.setMachine(mode); save(); render();
   describeMachine();
 }
 function describeMachine() {
   $('result').classList.remove('winning');
-  $('result').innerHTML = state.machine === 2 ? '<strong>TRIPEL → CASCADE</strong><span>Hanya tripel. Isi ulang, pengali 1× → 2× → 4×.</span>' : `<strong>SATU PUTARAN LAGI?</strong><span>${state.machine === 1 ? '3 garis horizontal. Pasangan dan tripel membayar.' : 'Cocokkan 2 atau 3 simbol di garis tengah.'}</span>`;
+  $('result').innerHTML = `<strong>${machineDef(state.machine).linesLabel}</strong><span>${machineDef(state.machine).help}</span>`;
 }
 function showHelp() {
-  showModal(`<div class="eyebrow">CARA BERMAIN</div><h2>Satu hari.<br>Banyak kebutuhan.</h2><ol class="instructions"><li><b>Atur waktu.</b> Mulai pukul 08:00 dengan 10 jam aktif. Spin memakai ${spinMinutes(state)} menit, shift Ojol ${jobMinutes(state)} menit. Menu dan pesan tidak memakai waktu.</li><li><b>Narik Ojol.</b> Hindari rintangan di 3 lajur dengan ← →, A/D, geser, atau tombol lajur. Tas kuning menambah Rp750. Benturan memotong Rp600. Hasil bersih minimal Rp1.000. Ojol tetap ada kalau mesin menguras saldo.</li><li><b>Cicilan.</b> Kos ditagih setiap hari ke-3. Pinjol harus lunas pada akhir hari yang tertulis di kontrak. Tutup hari membayar otomatis; kalau kurang, run berakhir.</li><li><b>Upgrade.</b> Ritme Sehat memperpanjang waktu aktif. Rute & Fokus mengurangi waktu order dan spin. Mesin Ngebut hanya mempercepat animasi. Pengali Cuan I membuat Receh cukup untuk hidup tanpa narik setiap jam.</li><li><b>Mesin.</b> Receh membayar garis tengah; Sultan tiga baris; Rantai hanya tripel dengan cascade 1×/2×/4×. Hold berbayar tersedia sekali sesudah spin normal. Kalau Sultan menguras, kembali ke Receh. Kalau Receh kosong, narik Ojol.</li><li><b>Istirahat.</b> Tekan TUTUP HARI di kamar atau mesin untuk melihat rencana dan masuk hari berikutnya.</li></ol><button class="primary-button" data-action="close">MENGERTI</button>`);
+  showModal(`<div class="eyebrow">CARA BERMAIN</div><h2>Satu hari.<br>Banyak kebutuhan.</h2><ol class="instructions"><li><b>Atur waktu.</b> Mulai pukul 08:00 dengan 10 jam aktif. Spin memakai ${spinMinutes(state)} menit, shift Ojol ${jobMinutes(state)} menit. Menu dan pesan tidak memakai waktu.</li><li><b>Narik Ojol.</b> Hindari rintangan di 3 lajur dengan ← →, A/D, geser, atau tombol lajur. Tas kuning menambah Rp750. Benturan memotong Rp600. Hasil bersih minimal Rp1.000. Ojol tetap ada kalau mesin menguras saldo.</li><li><b>Cicilan.</b> Kos ditagih setiap hari ke-3. Pinjol harus lunas pada akhir hari yang tertulis di kontrak. Tutup hari membayar otomatis; kalau kurang, run berakhir.</li><li><b>Upgrade.</b> Ritme Sehat memperpanjang waktu aktif. Rute & Fokus mengurangi waktu order dan spin. Mesin Ngebut hanya mempercepat animasi. Pengali Cuan I membuat Receh cukup untuk hidup tanpa narik setiap jam.</li><li><b>Mesin.</b> Receh membayar garis tengah; Sultan tiga baris; Rantai hanya tripel dengan cascade 1×/2×/4×; Buah Berkah memakai wild durian emas dan scatter lonceng berisi putaran gratis; Kakek Petir membayar simbol sama di mana saja dengan tumble dan pengali bola petir. Hold berbayar tersedia sekali sesudah spin normal (tidak di Rantai/Petir). Kalau Sultan menguras, kembali ke Receh. Kalau Receh kosong, narik Ojol.</li><li><b>Istirahat.</b> Tekan TUTUP HARI di kamar atau mesin untuk melihat rencana dan masuk hari berikutnya.</li></ol><button class="primary-button" data-action="close">MENGERTI</button>`);
 }
 function showOdds() {
-  showModal(`<div class="eyebrow">PEMBAYARAN MESIN</div><h2>Baca yang kecil.</h2><p>Pengali hadiah saat ini: <b>${multiplier(state).toFixed(2)}×</b>. Nilai berikut adalah pengali taruhan per garis.</p><table class="odds-table"><thead><tr><th>Simbol</th><th>2 sama</th><th>3 sama</th></tr></thead><tbody>${SYMBOLS.map(s=>`<tr><td>${s.name}</td><td>${s.pair}×</td><td>${s.triple}×</td></tr>`).join('')}</tbody></table><p>Sultan membayar tiga garis, 3× taruhan. Rantai hanya tripel: nilai tabel ×1,5 lalu tahap 1×/2×/4×. Maksimal tiga tahap, tanpa hold. Pasangan kopi mengembalikan taruhan; biaya tekanan dan Sultan tetap bisa menguras saldo. Kalau begitu, turun ke mesin yang lebih murah, atau narik Ojol.</p><p>Biaya tekanan: +${Math.round(feeRate(state)*100)}%. Spin memakai ${spinMinutes(state)} menit. Semua uang dan hasil adalah fiksi game.</p>`);
+  const def = machineDef(state.machine);
+  const lineRows = (names: readonly { name: string; pair?: number; triple?: number }[]) => names.map(s => `<tr><td>${s.name}</td><td>${s.pair}×</td><td>${s.triple}×</td></tr>`).join('');
+  let table: string, foot: string;
+  if (state.machine === 4) {
+    table = `<table class="odds-table"><thead><tr><th>Simbol</th><th>4×</th><th>5×</th><th>6+×</th></tr></thead><tbody>${def.symbols.slice(0, 6).map(s => `<tr><td>${s.name}</td><td>${s.pays![0]}×</td><td>${s.pays![1]}×</td><td>${s.pays![2]}×</td></tr>`).join('')}</tbody></table>`;
+    foot = 'Simbol yang menang runtuh dan diganti (tumble). Tiap tahap menaikkan pengali; bola petir menambah 2–8×. 3+ gerbang membuka 10 putaran gratis: semua bola petir selama gratis menaikkan pengali permanen run itu, dan 3+ gerbang menambah 5 putaran.';
+  } else if (state.machine === 3) {
+    table = `<table class="odds-table"><thead><tr><th>Simbol</th><th>2 sama</th><th>3 sama</th></tr></thead><tbody>${lineRows(def.symbols.slice(0, 6))}</tbody></table>`;
+    foot = 'Durian emas (wild) menggantikan semua buah dan membayar sebagai buah termahal. 3+ lonceng di mana saja: bayar 2× taruhan sekaligus membuka 8 putaran gratis berpengali 2×. Lonceng saat gratis menambah 8 putaran lagi.';
+  } else {
+    table = `<table class="odds-table"><thead><tr><th>Simbol</th><th>2 sama</th><th>3 sama</th></tr></thead><tbody>${lineRows(SYMBOLS)}</tbody></table>`;
+    foot = state.machine === 2 ? 'Rantai hanya tripel: nilai tabel ×1,5 lalu tahap 1×/2×/4×. Maksimal tiga tahap, tanpa hold.' : 'Sultan membayar tiga garis, 3× taruhan.';
+  }
+  showModal(`<div class="eyebrow">PEMBAYARAN MESIN</div><h2>${def.name}</h2><p>Pengali hadiah saat ini: <b>${multiplier(state).toFixed(2)}×</b>. Nilai berikut adalah pengali taruhan.</p>${table}<p>${foot} Pasangan kopi mengembalikan taruhan; biaya tekanan tetap bisa menguras saldo. Kalau begitu, turun ke mesin yang lebih murah, atau narik Ojol.</p><p>Biaya tekanan: +${Math.round(feeRate(state) * 100)}%. Spin memakai ${spinMinutes(state)} menit. Semua uang dan hasil adalah fiksi game.</p>`);
 }
 function selectTab(tab: string) {
   document.body.dataset.panel=tab;
@@ -250,7 +276,7 @@ document.addEventListener('click', e => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!b || b.disabled) return;
   audio.unlock();
   if(b.dataset.story==='tree-filter'&&b.closest('#upgrades')){workshopBranch=b.dataset.branch!;render();document.querySelector<HTMLButtonElement>(`#upgrades [data-branch="${workshopBranch}"]`)?.focus({preventScroll:true});return;}
-  if(b.dataset.treeMachine){const mode=Number(b.dataset.treeMachine) as 1|2;if(!busy&&unlockMachine(state,mode)){save();render();toast('Mesin baru terbuka. Buka dari aplikasi Judol.');}return;}
+  if(b.dataset.treeMachine){const mode=Number(b.dataset.treeMachine) as 1|2|3|4;if(!busy&&unlockMachine(state,mode)){save();render();toast('Mesin baru terbuka. Buka dari aplikasi Judol.');}return;}
   if (b.dataset.tab) { selectTab(b.dataset.tab); return; }
   if (b.dataset.hold !== undefined && !busy) { const i = Number(b.dataset.hold); held = held === i ? null : i; render(); return; }
   if (b.dataset.upgrade && !busy) {
@@ -268,6 +294,8 @@ document.addEventListener('click', e => {
     case 'receh-tab': setMachine(0); break;
     case 'sultan-tab': setMachine(1); break;
     case 'cascade-tab': setMachine(2); break;
+    case 'buah-tab': setMachine(3); break;
+    case 'petir-tab': setMachine(4); break;
     case 'ojol': showWork(); break;
     case 'pinjol': showFinance(); break;
     case 'bet-up': case 'bet-down': {
@@ -296,13 +324,13 @@ document.addEventListener('click', e => {
     case 'begin-finale': if (beginFinale(state)) { save(); render(); showFinale(); } break;
     case 'reveal-finale': if (revealFinale(state)) { save(); render(); showFinale(); } break;
     case 'end': endRun(state); save(); render(); showEnding(); break;
-    case 'unlock': { const m = Number(b.dataset.machine) as 1 | 2; if (unlockMachine(state, m)) { closeModal(); setMachine(m); audio.play('buy'); save(); render(); checkAfterSpin(); } break; }
+    case 'unlock': { const m = Number(b.dataset.machine) as 1 | 2 | 3 | 4; if (unlockMachine(state, m)) { closeModal(); setMachine(m); audio.play('buy'); save(); render(); checkAfterSpin(); } break; }
     case 'rebirth': case 'reset':
       if (busy) break; stopAuto();
       if (b.dataset.action === 'reset') { state = fresh(); state.muted = bank.settings.muted; bank = wrapState(state, bank.settings); }
       else state = prestige(state);
       audio.muted = state.muted; held = null;
-      scene?.display(state.grid); scene?.setMode(0); closeModal(); save(); render(); selectTab('machine');
+      scene?.display(state.grid); scene?.setMachine(0); closeModal(); save(); render(); selectTab('machine');
       $('result').classList.remove('winning'); $('result').innerHTML = '<strong>NASIB BARU. MIMPI LAMA.</strong><span>Satu putaran lagi?</span>'; story?.render(); break;
   }
 });
@@ -321,7 +349,7 @@ function enterPlay() {
   audio.muted = state.muted;
   if (state.story.view === 'menu') state.story.view = 'room';
   scene?.display(state.grid);
-  scene?.setMode(state.machine);
+  scene?.setMachine(state.machine);
   story?.render();
   render();
   describeMachine();
@@ -360,7 +388,7 @@ story = new StoryDirector({ state: () => state, save, work: showWork, finance: s
 });
 shell.boot();
 story.render();
-createReels(state.grid, ready => {
+createReels(state.grid, state.machine, ready => {
   scene = ready; $('loading').hidden = true;
   if (shell.phase === 'playing') {
     scene.display(state.grid); scene.setMode(state.machine); render(); describeMachine(); checkAfterSpin();

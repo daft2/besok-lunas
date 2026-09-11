@@ -1,3 +1,9 @@
+## v0.6 parody machines
+
+- Two parody machines join the lineup with their own symbol atlases: **Buah Berkah** (fruit-fiesta taste: wild golden durian, scatter bells, 8 free spins at 2×) and **Kakek Petir** (olympus-style thunder: pay-anywhere counts, tumbling cascades with lightning-orb multipliers, 10 free spins with an eternal multiplier that orbs grow).
+- Wilds substitute any regular symbol for line wins; scatters pay anywhere and call free spins, retriggerable mid-bonus. Free spins cost no cash or time; switching machines waits until they run out.
+- The engine splits lines (Receh/Sultan), triples cascades (Rantai), wild lines (Buah) and thunder tumbles (Petir). Save data is version 6; older saves migrate with the new machines locked.
+
 ## v0.5.1 polish review
 
 - Upgrade branches can be viewed individually, with larger readable nodes on mobile. The overview remains available.
@@ -115,6 +121,8 @@ The phone contains Messages, Judol, the upgrade shop, Pinjol and the late finale
 | Receh Rejeki | Pairs or triples on the center row; optional paid hold after upgrading | 1× stake | Starting machine |
 | Sultan Malam | Pairs or triples on three horizontal lines | 3× stake | Tahan Dulu I + 30 spins + Rp28,000 |
 | Rantai Rejeki | Triples clear and refill; triple payout ×1.5, then cascade factors 1×, 2×, 4×; maximum three evaluated stages; no hold | 3× stake | Sultan + Pengali Cuan II + 60 spins + Rp42,000 |
+| Buah Berkah | Three lines with a substituting wild; 3+ scatters anywhere pay 2× stake and open 8 free spins at 2×, retriggerable | 2× stake | Pengali Cuan I + 45 spins + Rp32,000 |
+| Kakek Petir | 4/5/6+ of a kind anywhere pays and tumbles; lightning orbs charge the step multiplier; 3+ gates open 10 free spins with an orb-grown eternal multiplier | 3× stake | Sultan + Pengali Cuan II + 80 spins + Rp60,000 |
 
 Base symbol weights are coffee 30, sandals 24, helmet 18, rooster 14, money 9, crown 5. Soft pity can modify an otherwise empty initial result. Pair payouts are 1× / 1.25× / 1.5× / 1.5× / 2.5× / 5×; triples 3× / 5× / 8× / 12× / 24× / 60×. A coffee pair returns the stake; pressure fees can still make that spin a loss.
 
@@ -128,7 +136,7 @@ Only 0 produces the good ending: **1% per eligible finale**. A Rp100 million pri
 
 ## Saves and validation
 
-The stable storage key remains `besok-lunas-v1`; save data is now version 5. Version 4 saves retain their calendar and active delivery, and gain the new upgrade fields at zero. Previously owned upgrades and machine unlocks remain usable even if they do not have the newly introduced parents. The following calendar conversion applies only to version 3 and earlier saves. Older saves preserve cash, upgrades, machine unlocks, story and loan balance. Calendar conversion starts on day 1 with a fresh time budget. Old overdue loans become due at the end of day 1, giving one bounded day to settle. Other old deadlines convert remaining turns into days. An active old three-stop delivery becomes a new reserved two-hour route. Completed endings remain completed.
+The stable storage key remains `besok-lunas-v1`; save data is now version 6. Version 5 saves gain the two locked parody machines and an empty free-spins state. Version 4 saves retain their calendar and active delivery, and gain the new upgrade fields at zero. Previously owned upgrades and machine unlocks remain usable even if they do not have the newly introduced parents. The following calendar conversion applies only to version 3 and earlier saves. Older saves preserve cash, upgrades, machine unlocks, story and loan balance. Calendar conversion starts on day 1 with a fresh time budget. Old overdue loans become due at the end of day 1, giving one bounded day to settle. Other old deadlines convert remaining turns into days. An active old three-stop delivery becomes a new reserved two-hour route. Completed endings remain completed.
 
 39 deterministic engine tests cover payouts, pity, time budgets, upgrades, calendar payments, hard endings, road safety, collisions, single payment, migration and finales. 46 desktop/mobile browser tests passed across the full run and targeted reruns, covering the guided route, keyboard/touch lane controls, pause/resume, exhausted-day behavior, automatic repayment, prestige, slot controls and both narrative endings. The production build also passes TypeScript checking.
 
