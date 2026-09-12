@@ -17,6 +17,7 @@ import {renderTree} from './tree';
 let workshopBranch='all';
 import {dayBar, dayPlan} from './day';
 import {RiderGame} from './rider';
+import './motion-v1.css';
 
 const money = (n: number) => 'Rp' + n.toLocaleString('id-ID');
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -33,6 +34,9 @@ let shell: GameShell;
 let storageFailed = false;
 let story: StoryDirector | undefined;
 let rider: RiderGame | undefined;
+let lastRenderCash: number | undefined;
+let lastRenderSpins: number | undefined;
+let lastRenderDay: number | undefined;
 
 $('app').innerHTML = `
   <div class="room" aria-hidden="true"></div><div class="vignette" aria-hidden="true"></div>
@@ -167,19 +171,34 @@ function render() {
   setButton('prestige', busy);
   $('logs').innerHTML = state.logs.slice(0, 4).map(l => `<div class="log-entry ${l.kind}"><span>${l.kind === 'win' ? '↗' : l.kind === 'loss' ? '↘' : '·'}</span><p>${escape(l.text)}</p></div>`).join('');
   $('sound').textContent = state.muted ? '♪̸' : '♪'; $('sound').setAttribute('aria-label', state.muted ? 'Nyalakan suara' : 'Matikan suara');
+  $('cabinet').classList.toggle('is-spinning', busy);
+  if (lastRenderCash !== undefined && lastRenderCash !== state.cash) pulseValue($('cash'), state.cash > lastRenderCash ? 'gain' : 'loss');
+  if (lastRenderSpins !== undefined && lastRenderSpins !== state.spins) pulseValue($('spin-count'), 'advance');
+  if (lastRenderDay !== undefined && lastRenderDay !== state.day) pulseValue($('day-dashboard'), 'advance');
+  lastRenderCash = state.cash;
+  lastRenderSpins = state.spins;
+  lastRenderDay = state.day;
   setButton('back-room', busy); setButton('open-phone', busy); story?.render();
 }
 let toastTimer: ReturnType<typeof setTimeout>;
 function toast(text: string) { $('toast').textContent = text; $('toast').classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('show'), 3200); }
+function pulseValue(element: HTMLElement, kind: 'gain' | 'loss' | 'advance') {
+  element.classList.remove('value-gain', 'value-loss', 'value-advance');
+  void element.offsetWidth;
+  element.classList.add(kind === 'gain' ? 'value-gain' : kind === 'loss' ? 'value-loss' : 'value-advance');
+}
 function stopAuto() { auto = false; clearTimeout(autoTimer); }
 function showModal(html: string, locked = false) {
   rider?.destroy(); rider=undefined;
   stopAuto(); $('modal-body').innerHTML = html; $('close-modal').hidden = locked;
   $<HTMLDialogElement>('modal').dataset.locked = String(locked);
   if (!$<HTMLDialogElement>('modal').open) $<HTMLDialogElement>('modal').showModal();
+  $('modal').classList.remove('modal-enter');
+  void $('modal').offsetWidth;
+  $('modal').classList.add('modal-enter');
   render();
 }
-function closeModal() { rider?.destroy(); rider=undefined; $<HTMLDialogElement>('modal').close(); }
+function closeModal() { rider?.destroy(); rider=undefined; $('modal').classList.remove('modal-enter'); $<HTMLDialogElement>('modal').close(); }
 function showBill() {
   showModal(`<div class="eyebrow">TAGIHAN · HARI ${state.day}</div><h2>Hari ini harus beres.</h2><p>Judol berhenti selama tagihan hari ini belum lunas. Kerja hanya tersedia selama waktumu cukup. Saat menutup hari, kekurangan pembayaran mengakhiri run.</p>${dayPlan(state)}<div class="ending-receipt"><span>Cicilan kos<b>${money(state.bill)}</b></span><span>Pinjol hari ini<b>${money(loanDue(state)?state.loan!.balance:0)}</b></span><span>Saldo<b>${money(state.cash)}</b></span></div>${state.bill&&state.cash>=state.bill?'<button class="primary-button" data-action="pay">BAYAR CICILAN KOS</button>':''}${loanDue(state)?'<button class="primary-button" data-action="finance">URUS PINJOL</button>':''}${canWork(state)?'<button class="primary-button green" data-action="work">NARIK OJOL</button>':'<p>Waktu untuk satu shift sudah tidak cukup.</p>'}<button class="secondary-button" data-action="day">TUTUP HARI / LIHAT RINCIAN</button>${!state.loan?'<button class="secondary-button" data-action="finance">Lihat Pinjol</button>':''}<button class="secondary-button" data-action="close">Kembali ke kamar</button>`);
 }
@@ -211,6 +230,7 @@ async function doSpin() {
   if (!result) { stopAuto(); audio.play('error'); checkAfterSpin(); return; }
   busy = true; held = null; state.story.guide = 3; save(); render(); audio.play('spin');
   $('result').classList.remove('winning'); $('result').innerHTML = '<strong>REJEKI LAGI DIPUTAR…</strong><span>Yang pasti cuma biaya spinnya.</span>';
+  $('result').classList.add('is-live');
   const machineId = state.machine;
   try { await scene.animate(result, state.upgrades.turbo, () => audio.play('stop'), factor => { $('result').innerHTML = machineId === 4 ? `<strong>PETIR ×${factor}</strong><span>Simbol pecah. Petir menyambar lagi.</span>` : `<strong>RANTAI ${factor}×</strong><span>Tripel pecah. Simbol baru turun.</span>`; }); }
   finally { busy = false; }
@@ -224,6 +244,7 @@ async function doSpin() {
     const freeNote = result.freeEnded ? ` Putaran gratis selesai: +${money(result.freeWon)}.` : result.freeUsed ? ` Gratis ×${result.freeLeft} tersisa.` : result.freeTriggered ? ' PUTARAN GRATIS DIMULAI!' : '';
     $('result').innerHTML = `<strong>+${money(amount)}</strong><span>${amount > result.paid ? `Bersih +${money(amount - result.paid)}.` : amount === result.paid ? 'Balik modal. Belum balik nasib.' : `Setelah biaya spin: −${money(result.paid - amount)}.`} ${extras}${freeNote}</span>`;
   } else $('result').innerHTML = `<strong>BELUM REJEKI.</strong><span>${centerNames}. Belum ada yang cocok.</span>`;
+  $('result').classList.remove('is-live');
   render(); checkAfterSpin();
   if (auto && !engineBlocked(state) && !document.hidden) autoTimer = setTimeout(() => void doSpin(), 650);
 }

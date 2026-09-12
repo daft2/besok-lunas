@@ -29,6 +29,9 @@ export class ReelScene extends Phaser.Scene {
   private art() { return ART[this.machine]; }
   constructor(grid: Grid, machine: MachineId, ready: (s: ReelScene) => void) { super('Reels'); this.initial = grid; this.machine = machine; this.last = grid; this.readyCallback = ready; }
   preload() {
+    // The current Receh atlas already has clean cell backgrounds and matches
+    // the line-art direction. Keep the generated paper-sheet reference in
+    // assets.md until it is exported with transparent cells.
     this.load.image('symbols', '/assets/symbols-v2.webp');
     this.load.image('buah', '/assets/buah-atlas.webp');
     this.load.image('petir', '/assets/petir-atlas.webp');
