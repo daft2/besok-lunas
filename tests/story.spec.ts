@@ -33,10 +33,13 @@ test('guided phone, work, family message, phone app and first spin form one play
  await expect(page.locator('.smartphone .guide-callout')).toContainText('PESAN DARI RUMAH');expect((await read(page)).cash).toBeGreaterThanOrEqual(1000);
  await expect(page.locator('[data-story=judol]')).toBeDisabled();
  await page.locator('[data-story=messages]').click();await page.locator('[data-message=maya]').click();await expect(page.locator('.message-bubble')).toContainText('uang sekolah');
- await page.locator('.phone-cta').click();await page.locator('[data-story=judol]').click();await expect(page.locator('#first-spin-tip')).toBeVisible();
- await page.locator('#spin').click();await expect(page.locator('#spin-label')).toHaveText('PUTAR');expect((await read(page)).story.guide).toBe(3);
+ await page.locator('.phone-cta').click();await page.locator('[data-story=judol]').click();
+ await expect(page.locator('.smartphone.judol-phone')).toBeVisible();await expect(page.locator('.smartphone #first-spin-tip')).toBeVisible();await expect(page.locator('.smartphone #spin')).toHaveClass(/guide-target/);await expect(page.locator('.smartphone .phone-cash')).toContainText('Rp');
+ await expect(page.locator('.room-stage')).toBeVisible();await expect(page.locator('.game-shell')).toHaveCount(0);
+ await page.locator('.smartphone #spin').click();await expect(page.locator('#spin-label')).toHaveText('PUTAR');expect((await read(page)).story.guide).toBe(3);
  if(await page.locator('#modal').isVisible())await page.locator('#close-modal').click();
- await page.locator('#back-room').click();await expect(page.locator('.room-stage')).toBeVisible();
+ await page.locator('.smartphone footer [data-story=home]').click();await expect(page.locator('.phone-app-grid')).toBeVisible();await expect(page.locator('.smartphone #spin')).toHaveCount(0);
+ await page.locator('.phone-close').click();await expect(page.locator('.smartphone')).not.toBeVisible();await expect(page.locator('.room-stage')).toBeVisible();
 });
 test('phone messages and shop work independently; room keyboard cannot spin the hidden game',async({page})=>{
  const s=fresh();s.story.intro=4;s.story.guide=3;s.cash=20000;s.spins=60;

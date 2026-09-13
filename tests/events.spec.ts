@@ -124,6 +124,31 @@ test('dismissing a notify keeps the room phone unread count', async ({ page }) =
   expect(saved.story.read.includes('ibu')).toBe(false);
 });
 
+test('tutup hari from an open Judol parks the cabinet and shows the kos bill', async ({ page }) => {
+  const s = playable();
+  s.day = 2;
+  s.minutes = 580;
+  await load(page, s);
+  await page.locator('.phone-object').click();
+  await page.locator('[data-story=judol]').click();
+  await expect(page.locator('.smartphone.judol-phone #spin')).toBeEnabled();
+  await expect(page.locator('.smartphone #reels canvas')).toHaveCount(1);
+  const cash = (await read(page)).cash;
+  await page.locator('.smartphone #spin').click();
+  await expect(page.locator('#spin-label')).toHaveText('PUTAR');
+  await expect(page.locator('#modal-body')).toContainText('Waktunya sudah habis');
+  expect((await read(page)).spins).toBe(1);
+  await page.locator('[data-action=end-day]').click();
+  await expect(page.locator('.event-card')).toContainText('Kos belum lunas');
+  await expect(page.locator('.smartphone.judol-phone')).toHaveCount(0);
+  await expect(page.locator('#reels canvas')).toHaveCount(1);
+  const after = await read(page);
+  expect(after.spins).toBe(1);
+  expect(after.day).toBe(3);
+  expect(after.bill).toBe(4000);
+  expect(after.cash).toBe(cash - 1000 + after.totalWon);
+});
+
 test('reload while a kos block is pending keeps one copy', async ({ page }) => {
   const s = playable();
   s.day = 2;

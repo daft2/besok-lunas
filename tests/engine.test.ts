@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fresh as newRun, spin, evaluate, cost, buyUpgrade, upgradeCost, unlockSultan, payBill, endRun, prestige, parseSave, parseBank, queueEvents, queueDueEvents, markFired, insightEarned, motionReduced, type Grid, type SaveBank, advanceTime, quoteLoan, borrow, repayLoan, loanDue, startJob, jobStep, cascade, tier, minimumCost, baseCost, unlockMachine, beginFinale, revealFinale, finaleReady, totalDebt, endDay, remainingTime, jobMinutes, spinMinutes, dayCapacity, canWork, moveLane, makeRoad, jobReward, ROAD_LENGTH, jobQuote, machinePrice, UPGRADE_GROWTH, multiplier } from '../src/engine';
+import { fresh as newRun, spin, evaluate, cost, buyUpgrade, upgradeCost, unlockSultan, payBill, endRun, prestige, parseSave, parseBank, queueEvents, queueDueEvents, markFired, insightEarned, motionReduced, type Grid, type SaveBank, advanceTime, quoteLoan, borrow, repayLoan, loanDue, startJob, jobStep, jobHit, jobCollect, jobAdvance, aabb, cascade, tier, minimumCost, baseCost, unlockMachine, beginFinale, revealFinale, finaleReady, totalDebt, endDay, remainingTime, jobMinutes, spinMinutes, dayCapacity, canWork, moveLane, makeRoad, jobReward, ROAD_LENGTH, jobQuote, machinePrice, UPGRADE_GROWTH, multiplier, RESUME_JUDOL } from '../src/engine';
 import { dueEvents, hasBlockingEvent, pendingBlock, pendingNotify } from '../src/events';
 
 const fresh = (insight = 0, runs = 1) => { const s = newRun(insight, runs); s.cash = 45000 + insight * 5000; return s; };
@@ -238,6 +238,30 @@ test('collisions reduce income, orders increase it and payout has a floor',()=>{
  const s=newRun();startJob(s,()=>.5);const j=s.job!;moveLane(s,1);jobStep(s);assert.equal(j.orders,1);jobStep(s);assert.equal(j.hits,1);
  assert.equal(jobReward({...j,orders:0,hits:12}),1000);assert.equal(moveLane(s,-1),false);assert.equal(moveLane(s,3),false);
 });
+test('AABB helpers score a hit only for the overlapping lane',()=>{
+ const s=newRun();startJob(s,()=>.5);
+ const rider={x:177,y:437,w:66,h:112};
+ const other={x:68,y:438,w:76,h:110};
+ const same={x:172,y:438,w:76,h:110};
+ const farBag={x:270,y:453,w:88,h:80};
+ const midBag={x:166,y:453,w:88,h:80};
+ assert.equal(aabb(rider,other),false);
+ if(aabb(rider,other))jobHit(s);
+ assert.equal(s.job!.hits,0);
+ assert.equal(aabb(rider,same),true);
+ if(aabb(rider,same))jobHit(s);
+ assert.equal(s.job!.hits,1);
+ assert.equal(aabb(rider,farBag),false);
+ if(aabb(rider,farBag))jobCollect(s);
+ assert.equal(s.job!.orders,0);
+ assert.equal(aabb(rider,midBag),true);
+ if(aabb(rider,midBag))jobCollect(s);
+ assert.equal(s.job!.orders,1);
+ assert.equal(jobAdvance(s),true);
+ assert.equal(s.job!.step,1);
+ assert.equal(s.job!.hits,1);
+ assert.equal(s.job!.orders,1);
+});
 test('opening a delivery cannot skip payment day or restore time on refresh',()=>{
  const s=newRun();borrow(s,10000);s.day=4;s.minutes=480;startJob(s);assert.equal(s.minutes,600);assert.equal(endDay(s),false);
  const restored=parseSave(JSON.stringify(s))!;assert.equal(restored.minutes,600);assert.deepEqual(restored.job!.rows,s.job!.rows);assert.equal(startJob(restored),false);
@@ -324,6 +348,14 @@ test('three slots store independent cash', () => {
 test('parseSave accepts story.view menu', () => {
   const s = fresh(); s.story.view = 'menu';
   assert.equal(parseSave(JSON.stringify(s))!.story.view, 'menu');
+});
+
+test('parseSave folds the retired game view into the phone with a one-shot Judol restore flag', () => {
+  const s = fresh(); s.story.intro = 4; s.story.guide = 3;
+  const restored = parseSave(JSON.stringify({ ...s, story: { ...s.story, view: 'game' } }))!;
+  assert.equal(restored.story.view, 'phone');
+  assert.deepEqual(restored.story.flags, [RESUME_JUDOL]);
+  assert.equal(parseSave(JSON.stringify({ ...s, story: { ...s.story, view: 'cabinet' } })), null);
 });
 
 test('parseBank keeps valid slots when one slot is corrupt', () => {

@@ -1,7 +1,7 @@
 import {renderTree} from './tree';
 import './world-v05.css';
 import {dayBar} from './day';
-import { type State, clockTime, totalDebt, finaleReady, FINALE_COST, loanDue, markFired, queueDueEvents } from './engine';
+import { type State, clockTime, totalDebt, finaleReady, FINALE_COST, loanDue, markFired, queueDueEvents, RESUME_JUDOL } from './engine';
 import { eventById, pendingBlock, pendingNotify } from './events';
 const rp = (n: number) => 'Rp' + n.toLocaleString('id-ID');
 const PANELS = [
@@ -61,15 +61,35 @@ function syncThreads(s: State): boolean {
   }
   return changed;
 }
-export interface StoryHooks { state: () => State; save: () => void; work: () => void; finance: () => void; shop: () => void; game: () => void; finale: () => void; restart: () => void; blocked: () => boolean; leaveApp: () => void; onEscape?: () => boolean; system?: () => void; }
+export interface StoryHooks { state: () => State; save: () => void; work: () => void; finance: () => void; judol: () => void; finale: () => void; restart: () => void; blocked: () => boolean; leaveApp: () => void; onEscape?: () => boolean; system?: () => void; cabinet: HTMLElement; }
 export class StoryDirector {
   private layer: HTMLElement;
   private phonePage = 'home';
   private treeBranch = 'all';
   private lastKey = '';
   private appHTML = '';
-  openApp(html:string) { this.hooks.leaveApp();this.appHTML=html;this.phonePage='ojol';this.hooks.state().story.view='phone';this.layer.innerHTML='';this.lastKey='';this.hooks.save();this.render();return this.layer.querySelector<HTMLElement>('#phone-app')!; }
+  private dock: HTMLElement;
+  openApp(html:string) { this.hooks.leaveApp();this.appHTML=html;this.phonePage='ojol';this.hooks.state().story.view='phone';this.wipe('');this.lastKey='';this.hooks.save();this.render();return this.layer.querySelector<HTMLElement>('#phone-app')!; }
+  judolOpen() { const s = this.hooks.state(); return s.story.intro === 4 && s.story.view === 'phone' && this.phonePage === 'judol'; }
+  // The Phaser canvas lives inside the cabinet, so the node is moved rather than re-rendered.
+  private park() { if (this.hooks.cabinet.parentElement !== this.dock) this.dock.append(this.hooks.cabinet); }
+  private wipe(html: string) { this.park(); this.layer.innerHTML = html; }
+  private mount(host: HTMLElement, guide: number) {
+    host.append(this.hooks.cabinet);
+    this.hooks.judol();
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('resize'));
+      if (guide === 2) this.hooks.cabinet.querySelector('#spin')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }
+  private refreshChrome(s: State) {
+    for (const [selector, text] of [['.phone-status b', clockTime(s)], ['.home-chapter b', `Hari ${String(s.day).padStart(2, '0')} · ${clockTime(s)}`], ['.world-wallet b', rp(s.cash)], ['.phone-status .phone-cash', rp(s.cash)]] as const) {
+      const el = this.layer.querySelector(selector);
+      if (el && el.textContent !== text) el.textContent = text;
+    }
+  }
   constructor(private hooks: StoryHooks) {
+    this.dock = hooks.cabinet.parentElement!;
     this.layer = document.createElement('section'); this.layer.id = 'story-layer'; document.body.append(this.layer);
     document.addEventListener('keydown', e => {
       if (e.key === 'Tab' && !this.hooks.blocked() && this.hooks.state().story.view === 'phone') {
@@ -106,8 +126,7 @@ export class StoryDirector {
         case 'judol':
           queueDueEvents(s);
           if (pendingBlock(s)) break;
-          s.story.view = 'game';
-          this.hooks.game(); break;
+          this.phonePage = 'judol'; break;
         case 'ack-event':
           markFired(s, b.dataset.event!);
           if (s.bill || loanDue(s)) s.story.view = 'room';
@@ -129,7 +148,6 @@ export class StoryDirector {
   }
   toRoom() { this.hooks.leaveApp(); this.hooks.state().story.view = 'room'; this.hooks.save(); this.render(); }
   toPhone() { this.hooks.leaveApp(); this.hooks.state().story.view = 'phone'; this.phonePage = 'home'; this.hooks.save(); this.render(); }
-  toGame() { this.hooks.state().story.view = 'game'; this.hooks.save(); this.render(); }
   render() {
     const s = this.hooks.state();
     if (s.story.view === 'menu') {
@@ -139,6 +157,7 @@ export class StoryDirector {
       return;
     }
     const before = JSON.stringify([s.story.pending, s.story.flags, s.story.fired, s.story.threads, s.story.read]);
+    if (s.story.flags.includes(RESUME_JUDOL)) { s.story.flags = s.story.flags.filter(flag => flag !== RESUME_JUDOL); this.phonePage = 'judol'; }
     queueDueEvents(s);
     let progressed = syncThreads(s);
     if (s.story.guide === 0 && s.deliveries > 0) { s.story.guide = 1; progressed = true; }
@@ -148,28 +167,29 @@ export class StoryDirector {
     const block = pendingBlock(s);
     const showBlock = !!block && view !== 'intro';
     const notice = !showBlock ? pendingNotify(s) : undefined;
-    document.body.dataset.world = showBlock ? (view === 'game' ? 'game' : 'room') : view;
+    document.body.dataset.world = view;
+    this.layer.hidden = false;
     if (showBlock && block) {
-      this.layer.hidden = false;
       const overlay = `<div class="event-scrim"><section class="event-card" role="dialog" aria-modal="true" aria-labelledby="event-title"><span class="event-kicker">HARI ${String(s.day).padStart(2,'0')} · ${clockTime(s)}</span><h2 id="event-title">${block.title}</h2><p>${block.body}</p><button type="button" class="event-ack" data-story="ack-event" data-event="${block.id}">Mengerti</button></section></div>`;
       const key = JSON.stringify(['block', block.id, s.story.pending, s.day, s.minutes, view]);
-      if (key !== this.lastKey) { this.lastKey = key; this.layer.innerHTML = overlay; }
+      if (key !== this.lastKey) { this.lastKey = key; this.wipe(overlay); }
       return;
     }
-    this.layer.hidden = view === 'game';
-    if(view==='phone'&&this.phonePage==='ojol'&&this.layer.querySelector('#phone-app'))return;
+    const appMounted = this.phonePage === 'ojol' ? this.layer.querySelector('#phone-app') : this.phonePage === 'judol' ? this.layer.querySelector('#judol-host') : null;
+    if (view === 'phone' && appMounted) { this.refreshChrome(s); return; }
     const key = JSON.stringify([view, s.story.intro, s.story.guide, s.story.read, s.story.threads, s.story.pending, s.story.flags, s.story.fired, this.phonePage, this.treeBranch, s.cash, s.spins, s.deliveries, s.turns, s.day, s.minutes, s.upgrades.stamina, s.upgrades.efficient, s.ended, s.familyDebt, s.totalWon, s.cascadeUnlocked, s.loan?.balance, s.job?.step, s.upgrades, totalDebt(s)]);
     if (key === this.lastKey) return; this.lastKey = key;
-    if (view === 'game') { requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))); return; }
     if (view === 'intro') {
       const p = PANELS[s.story.intro];
-      this.layer.innerHTML = `<div class="prologue"><header><b>BESOK LUNAS<span>PROLOG</span></b><button data-story="skip">Lewati prolog ↗</button></header><article class="comic-frame" key="${s.story.intro}"><div class="comic-art panel-${s.story.intro}" role="img" aria-label="${['Bima makan bersama istri dan anaknya', 'Bima mendampingi ayah dan ibunya', 'Bima menatap tagihan dan dompet kosong', 'Cahaya ponsel menerangi wajah Bima'][s.story.intro]}"></div><div class="comic-lines" aria-hidden="true"></div><div class="comic-quote">${p.voice}</div><div class="comic-caption"><span>${p.chapter}</span><h1>${p.title}</h1><p>${p.text}</p></div></article><footer><div class="comic-dots">${PANELS.map((_,i)=>`<i class="${i === s.story.intro ? 'active' : ''}"></i>`).join('')}</div><button data-story="previous" ${s.story.intro === 0 ? 'disabled' : ''}>← Kembali</button><button class="comic-next" data-story="next">${s.story.intro === 3 ? 'MASUK KE KAMAR' : 'LANJUT'} →</button></footer></div>`; return;
+      this.wipe(`<div class="prologue"><header><b>BESOK LUNAS<span>PROLOG</span></b><button data-story="skip">Lewati prolog ↗</button></header><article class="comic-frame" key="${s.story.intro}"><div class="comic-art panel-${s.story.intro}" role="img" aria-label="${['Bima makan bersama istri dan anaknya', 'Bima mendampingi ayah dan ibunya', 'Bima menatap tagihan dan dompet kosong', 'Cahaya ponsel menerangi wajah Bima'][s.story.intro]}"></div><div class="comic-lines" aria-hidden="true"></div><div class="comic-quote">${p.voice}</div><div class="comic-caption"><span>${p.chapter}</span><h1>${p.title}</h1><p>${p.text}</p></div></article><footer><div class="comic-dots">${PANELS.map((_,i)=>`<i class="${i === s.story.intro ? 'active' : ''}"></i>`).join('')}</div><button data-story="previous" ${s.story.intro === 0 ? 'disabled' : ''}>← Kembali</button><button class="comic-next" data-story="next">${s.story.intro === 3 ? 'MASUK KE KAMAR' : 'LANJUT'} →</button></footer></div>`); return;
     }
     const previousScroll=this.layer.querySelector('.phone-content')?.scrollTop??0;
     const tip=s.story.guide===0?['01 · MULAI DARI SINI','Angkat ponselmu.','Buka aplikasi Ojol untuk mencari uang pertama.']:s.story.guide===1?['02 · ADA PESAN MASUK','Maya menunggumu.','Buka ponsel, lalu baca pesan dari rumah.']:s.story.guide===2?['03 · JANJI DI LAYAR','Satu layar. Banyak pilihan.','Aplikasi Judol sudah bisa dibuka dari ponsel.']:['KAMAR 07 · KAMPUNG REJEKI','Hari ini, kita usahakan lagi.','Kerja, rencana, dan kabar dari rumah. Semuanya di ponselmu.'];
     const noticeHtml = notice ? `<aside class="event-notice" role="status"><span>${notice.title}</span><p>${notice.body}</p><button type="button" data-story="dismiss-event" data-event="${notice.id}">Tutup</button></aside>` : '';
-    this.layer.innerHTML=`<div class="world-shell world-v05" ${view==='phone'?'inert':''}><header class="world-header"><div class="world-brand">BESOK <strong>LUNAS!</strong></div><div class="home-chapter"><span>SEBUAH CERITA TENTANG BESOK</span><b>Hari ${String(s.day).padStart(2,'0')} · ${clockTime(s)}</b></div><div class="world-wallet"><small>UANG DI TANGAN</small><b>${rp(s.cash)}</b></div><button data-story="system" type="button">Menu</button><button data-story="replay" aria-label="Putar ulang prolog">Prolog ↺</button></header><div class="room-stage"><div class="room-art"></div><div class="room-title"><span>${tip[0]}</span><h1>${tip[1]}</h1><p>${tip[2]}</p></div>${noticeHtml}<button class="phone-object desk-phone ${s.story.guide<3?'guided':''}" data-story="phone" aria-label="Angkat ponsel Bima"><span class="phone-beacon"></span><b>ANGKAT PONSEL <i>↗</i></b><small>${unreadCount(s)} pesan · ${s.job?'shift belum selesai':'Ojol sudah online'}</small></button><div class="room-caption"><span>“Pelan-pelan juga sampai.”</span><small>KAMAR BIMA · ${s.runs===1?'AWAL PERJALANAN':'NASIB KE-'+s.runs}</small></div></div><div class="home-below">${dayBar(s)}<div class="home-obligation"><span>YANG MASIH DIPERJUANGKAN<b>${rp(s.familyDebt)}</b></span><p>Untuk Bapak, Ibu, Maya,<br>dan masa depan Naya.</p><button data-story="restart">Ulang Nasib ↗</button></div></div></div>${view==='phone'?this.phone(s):''}`;
+    this.wipe(`<div class="world-shell world-v05" ${view==='phone'?'inert':''}><header class="world-header"><div class="world-brand">BESOK <strong>LUNAS!</strong></div><div class="home-chapter"><span>SEBUAH CERITA TENTANG BESOK</span><b>Hari ${String(s.day).padStart(2,'0')} · ${clockTime(s)}</b></div><div class="world-wallet"><small>UANG DI TANGAN</small><b>${rp(s.cash)}</b></div><button data-story="system" type="button">Menu</button><button data-story="replay" aria-label="Putar ulang prolog">Prolog ↺</button></header><div class="room-stage"><div class="room-art"></div><div class="room-title"><span>${tip[0]}</span><h1>${tip[1]}</h1><p>${tip[2]}</p></div>${noticeHtml}<button class="phone-object desk-phone ${s.story.guide<3?'guided':''}" data-story="phone" aria-label="Angkat ponsel Bima"><span class="phone-beacon"></span><b>ANGKAT PONSEL <i>↗</i></b><small>${unreadCount(s)} pesan · ${s.job?'shift belum selesai':'Ojol sudah online'}</small></button><div class="room-caption"><span>“Pelan-pelan juga sampai.”</span><small>KAMAR BIMA · ${s.runs===1?'AWAL PERJALANAN':'NASIB KE-'+s.runs}</small></div></div><div class="home-below">${dayBar(s)}<div class="home-obligation"><span>YANG MASIH DIPERJUANGKAN<b>${rp(s.familyDebt)}</b></span><p>Untuk Bapak, Ibu, Maya,<br>dan masa depan Naya.</p><button data-story="restart">Ulang Nasib ↗</button></div></div></div>${view==='phone'?this.phone(s):''}`);
     if(this.phonePage==='tree'){const content=this.layer.querySelector('.phone-content');if(content)content.scrollTop=previousScroll;}
+    const host = this.layer.querySelector<HTMLElement>('#judol-host');
+    if (host) this.mount(host, s.story.guide);
   }
   private phone(s: State): string {
     const threads = listedThreads(s);
@@ -177,12 +197,13 @@ export class StoryDirector {
     const beats = selected ? unlockedBeats(selected, s) : [];
     let content = '';
     if(this.phonePage==='ojol')content=`<div class="ojol-app-header"><span>OJOL<span class="online-dot"></span></span><small>KAMPUNG REJEKI</small></div><div id="phone-app">${this.appHTML}</div>`;
+    else if(this.phonePage==='judol')content='<div id="judol-host"></div>';
     else if(this.phonePage==='tree')content=renderTree(s,this.treeBranch);
     else if (this.phonePage === 'messages') content = `<div class="phone-page-title"><span>YANG BELUM DIBALAS</span><h2>Pesan</h2></div><div class="message-list">${threads.map(thread=>{const open=unlockedBeats(thread,s);return `<button class="${s.story.guide===1&&thread.id==='maya'?'guide-target':''}" data-story="message" data-message="${thread.id}"><i>${thread.avatar}</i><span><b>${thread.from}</b><small>${open[open.length-1].preview}</small></span>${s.story.read.includes(thread.id) ? '' : '<em></em>'}</button>`;}).join('')}</div>`;
     else if (selected) content = `<button class="phone-back" data-story="messages">← Semua pesan</button><div class="phone-page-title"><span>PERCAKAPAN</span><h2>${selected.from}</h2></div><div class="message-thread">${beats.map(beat=>`<div class="message-beat"><p class="message-bubble">${beat.text}</p><p class="message-narration">${beat.reply}</p></div>`).join('')}</div><button class="phone-cta ${s.story.guide===2?'guide-target':''}" data-story="home">Kembali ke aplikasi →</button>`;
     else content=`<div class="phone-wallpaper"><span>HARI ${String(s.day).padStart(2,'0')} · KAMPUNG REJEKI</span><h2>${clockTime(s)}</h2><p>Masih ada yang bisa diusahakan.</p></div><div class="phone-balance"><small>SALDO BIMA</small><b>${rp(s.cash)}</b></div><div class="phone-app-grid"><button class="${s.story.guide===0?'guide-target':''}" data-story="work"><i class="app-art app-art-4"></i><b>Ojol</b><small>${s.job?'Lanjut shift':'Cari orderan'}</small></button><button class="${s.story.guide===1?'guide-target':''}" data-story="messages"><i class="app-messages">▤<em>${threads.filter(thread=>!s.story.read.includes(thread.id)).length}</em></i><b>Pesan</b><small>Dari rumah</small></button><button class="${s.story.guide===2?'guide-target':''}" data-story="judol" ${s.story.guide<2?'disabled':''}><i class="app-art app-art-3"></i><b>Judol</b><small>Janji cepat kaya</small></button><button data-story="shop"><i class="app-art app-art-5"></i><b>Rencana</b><small>Pohon upgrade</small></button><button data-story="finance"><i class="app-art app-art-2"></i><b>Pinjol</b><small>${s.loan?'Hari '+s.loan.due:'Cair Kilat'}</small></button><button data-story="finale"><i class="app-finale">✧</i><b>Terakhir</b><small>${finaleReady(s)?'Sudah terbuka':s.spins+'/100 spin'}</small></button></div><div class="phone-family-note"><span>ALASAN KAMU PULANG</span><p>“Kalau belum ada, bilang saja.<br>Kita pikirkan bareng.”</p><small>Maya · Rumah</small></div>`;
-    const guide=this.phonePage==='ojol'||this.phonePage==='tree'?'':s.story.guide===0?'<b>01 · PENGHASILAN PERTAMA</b>Tekan aplikasi Ojol yang disorot.':s.story.guide===1?`<b>02 · PESAN DARI RUMAH</b>${this.phonePage==='messages'?'Tekan percakapan Maya yang disorot.':'Tekan aplikasi Pesan yang disorot.'}`:s.story.guide===2?`<b>03 · JANJI DI LAYAR</b>${selected?'Kembali ke aplikasi, lalu buka Judol.':'Tekan aplikasi Judol yang disorot.'}`:'';
-    return `<div class="phone-scrim"><section class="smartphone phone-v05 ${this.phonePage==='tree'?'tree-phone':''} ${this.phonePage==='ojol'?'rider-phone':''}" role="dialog" aria-modal="true" aria-label="Ponsel Bima"><div class="phone-status"><b>${clockTime(s)}</b><i></i><span>▰ 62%</span></div><button class="phone-close" data-story="room" aria-label="Letakkan ponsel">×</button><div class="phone-content">${guide?`<div class="guide-callout">${guide}</div>`:''}${content}</div><footer><button data-story="home">⌂ <span>Aplikasi</span></button><button data-story="system">☰ <span>Menu</span></button><button data-story="room">↓ <span>Letakkan</span></button></footer></section></div>`;
+    const guide=['ojol','tree','judol'].includes(this.phonePage)?'':s.story.guide===0?'<b>01 · PENGHASILAN PERTAMA</b>Tekan aplikasi Ojol yang disorot.':s.story.guide===1?`<b>02 · PESAN DARI RUMAH</b>${this.phonePage==='messages'?'Tekan percakapan Maya yang disorot.':'Tekan aplikasi Pesan yang disorot.'}`:s.story.guide===2?`<b>03 · JANJI DI LAYAR</b>${selected?'Kembali ke aplikasi, lalu buka Judol.':'Tekan aplikasi Judol yang disorot.'}`:'';
+    return `<div class="phone-scrim"><section class="smartphone phone-v05 ${this.phonePage==='tree'?'tree-phone':''} ${this.phonePage==='ojol'?'rider-phone':''} ${this.phonePage==='judol'?'judol-phone':''}" role="dialog" aria-modal="true" aria-label="Ponsel Bima"><div class="phone-status"><b>${clockTime(s)}</b><i></i>${this.phonePage==='judol'?`<span class="phone-cash">${rp(s.cash)}</span>`:'<span>▰ 62%</span>'}</div><button class="phone-close" data-story="room" aria-label="Letakkan ponsel">×</button><div class="phone-content">${guide?`<div class="guide-callout">${guide}</div>`:''}${content}</div><footer><button data-story="home">⌂ <span>Aplikasi</span></button><button data-story="system">☰ <span>Menu</span></button><button data-story="room">↓ <span>Letakkan</span></button></footer></section></div>`;
 
   }
 }

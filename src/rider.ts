@@ -1,14 +1,77 @@
-import {type State, jobStep, moveLane, jobReward, ROAD_LENGTH} from './engine';
+import {type State, aabb, jobHit, jobCollect, jobAdvance, jobReward, moveLane, ROAD_LENGTH, type HitBox} from './engine';
 import './rider-v05.css';
 
 type Particle = {x:number;y:number;vx:number;vy:number;life:number;color:string};
-/** The saved route owns outcomes. Animation never draws another random route. */
+interface Entity {
+  kind: 'obstacle' | 'order';
+  lane: 0 | 1 | 2;
+  y: number;
+  w: number;
+  h: number;
+  resolved: boolean;
+}
+type LiveEntity = Entity & { row: number; cell: number };
+type RowGate = { row: number; y: number };
+
+const LANE_X = [106, 210, 314] as const;
+const RIDER_Y = 493;
+const RIDER_SIZE = 112;
+const OBSTACLE_SIZE = 110;
+const ORDER_SIZE = 88;
+const SPAWN_Y = -70;
+const TEACH_GAP = 300;
+const ROW_GAP = 220;
+const TEACH_SPEED = 0.12;
+const SPEED = 0.24;
+const ATLAS = [
+  [130, 65, 305, 515],
+  [585, 55, 350, 505],
+  [1090, 35, 335, 535],
+  [45, 645, 455, 285],
+  [580, 605, 370, 335],
+  [1080, 640, 375, 300],
+] as const;
+
+function drawnSize(cell: number, size: number) {
+  const [, , sw, sh] = ATLAS[cell];
+  const scale = size / Math.max(sw, sh);
+  return { w: sw * scale, h: sh * scale };
+}
+function knockWhite(data: Uint8ClampedArray, w: number, h: number) {
+  const at = (x: number, y: number) => (y * w + x) * 4;
+  const bg = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return false;
+    const i = at(x, y);
+    return data[i + 3] !== 0 && data[i] > 245 && data[i + 1] > 245 && data[i + 2] > 245;
+  };
+  const stack: number[] = [];
+  const push = (x: number, y: number) => {
+    if (!bg(x, y)) return;
+    data[at(x, y) + 3] = 0;
+    stack.push(x, y);
+  };
+  for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+  for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+  while (stack.length) {
+    const y = stack.pop()!;
+    const x = stack.pop()!;
+    push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1);
+  }
+}
+function laneOf(n: number): 0 | 1 | 2 | null {
+  if (n === 0 || n === 1 || n === 2) return n;
+  return null;
+}
+
 export class RiderGame {
-  private frame=0; private elapsed=0; private last=0; private paused=true; private dead=false;
-  private touchX=0; private touchY=0; private waveMs=1800; private visualLane=1; private travel=0; private flash=0;
+  private frame=0; private last=0; private paused=true; private dead=false;
+  private touchX=0; private touchY=0; private visualLane=1; private travel=0; private flash=0;
   private particles:Particle[]=[]; private feedback='Ambil order. Cari celah. Pulang bawa hasil.';
   private canvas:HTMLCanvasElement; private ctx:CanvasRenderingContext2D;
   private atlas=new Image(); private road=new Image();
+  private entities:LiveEntity[]=[]; private gates:RowGate[]=[];
+  private sheets:(HTMLCanvasElement|null)[]=ATLAS.map(()=>null);
+  private hitbox=new URLSearchParams(location.search).get('hitbox')==='1';
   constructor(private host:HTMLElement,private state:()=>State,private save:()=>void,private finished:(cash:number,orders:number,hits:number)=>void){
     this.host.classList.add('rider-v05');
     this.host.innerHTML=`<div class="rider-hud"><span><small>PERJALANAN</small><b id="ride-distance"></b></span><span><small>ORDER TAMBAHAN</small><b id="ride-orders"></b></span><span><small>BENTURAN</small><b id="ride-hits"></b></span></div><div class="ride-progress"><i id="ride-progress-fill"></i></div><div class="road-wrap"><canvas id="road" width="420" height="600" role="img" aria-label="Jalan tiga lajur. Hindari kendaraan dan ambil tas order kuning menggunakan tombol lajur di bawah."></canvas><div class="road-overlay" id="ride-overlay"><div class="ride-badge">OJOL · KAMPUNG REJEKI</div><b id="ride-ready">SIAP NARIK?</b><span>Ambil tas order kuning.<br>Hindari kendaraan & pembatas.</span><div class="ride-how"><strong>← &nbsp; PINDAH LAJUR &nbsp; →</strong><span>Geser jalan, tap lajur, atau pakai A / D.</span></div><button class="primary-button green" id="ride-go">GAS, CARI ORDER →</button></div><div class="ride-feedback" id="ride-feedback" role="status"></div><div class="ride-road-label">KAMPUNG REJEKI <span>● LIVE</span></div></div><div class="lane-controls" aria-label="Pilih lajur">${['KIRI','TENGAH','KANAN'].map((l,i)=>`<button data-lane="${i}" aria-label="Lajur ${l.toLowerCase()}">${['←','↑','→'][i]} <span>${l}</span></button>`).join('')}</div><div class="ride-footer"><div><small>PENDAPATAN BERSIH</small><b id="ride-earnings"></b></div><button id="ride-pause" aria-label="Jeda perjalanan">Ⅱ Jeda</button></div><small class="ride-save">Bensin sudah dipotong. Pendapatan masuk saat sampai.</small>`;
@@ -20,7 +83,7 @@ export class RiderGame {
     this.atlas.src='/assets/ojol-atlas.webp';this.road.src='/assets/road-lineart-v1.jpg';
     this.host.addEventListener('click',this.click);this.canvas.addEventListener('pointerdown',this.pointerStart);this.canvas.addEventListener('pointerup',this.pointerEnd);
     document.addEventListener('keydown',this.key);document.addEventListener('visibilitychange',this.visibility);
-    this.setPause(true);this.update();this.frame=requestAnimationFrame(this.tick);
+    this.rebuild();this.setPause(true);this.update();this.frame=requestAnimationFrame(this.tick);
   }
   pause(){if(!this.dead)this.setPause(true);}
   private live(){return !this.dead && document.body.dataset.shell==='playing';}
@@ -33,7 +96,7 @@ export class RiderGame {
   };
   private visibility=()=>{if(document.hidden)this.setPause(true);};
   private lane(n:number){const before=this.state().job?.lane;if(moveLane(this.state(),n)){this.feedback=before===n?'Tetap di lajur ini.':`Pindah ke lajur ${['kiri','tengah','kanan'][n]}.`;this.save();this.update();this.host.classList.remove('lane-change');void this.host.offsetWidth;this.host.classList.add('lane-change');}}
-  private setPause(value:boolean){this.paused=value;this.last=0;this.host.classList.toggle('is-paused',value);this.host.querySelector<HTMLElement>('#ride-overlay')!.hidden=!value;this.host.querySelector('#ride-ready')!.textContent=this.elapsed||this.state().job?.step?'TARIK NAPAS DULU.':'SIAP NARIK?';this.host.querySelector('#ride-go')!.textContent=this.elapsed||this.state().job?.step?'LANJUT NARIK →':'GAS, CARI ORDER →';this.host.querySelector('#ride-pause')!.textContent=value?'▶ Lanjut':'Ⅱ Jeda';this.host.querySelector('#ride-pause')!.setAttribute('aria-label',value?'Lanjut perjalanan':'Jeda perjalanan');}
+  private setPause(value:boolean){this.paused=value;this.last=0;this.host.classList.toggle('is-paused',value);this.host.querySelector<HTMLElement>('#ride-overlay')!.hidden=!value;this.host.querySelector('#ride-ready')!.textContent=this.travel||this.state().job?.step?'TARIK NAPAS DULU.':'SIAP NARIK?';this.host.querySelector('#ride-go')!.textContent=this.travel||this.state().job?.step?'LANJUT NARIK →':'GAS, CARI ORDER →';this.host.querySelector('#ride-pause')!.textContent=value?'▶ Lanjut':'Ⅱ Jeda';this.host.querySelector('#ride-pause')!.setAttribute('aria-label',value?'Lanjut perjalanan':'Jeda perjalanan');}
   private update(){const j=this.state().job;if(!j)return;
     this.host.querySelector('#ride-distance')!.textContent=`${j.step}/${ROAD_LENGTH}`;this.host.querySelector('#ride-orders')!.textContent=String(j.orders);this.host.querySelector('#ride-hits')!.textContent=String(j.hits);
     this.host.querySelector('#ride-earnings')!.textContent=`Rp${jobReward(j).toLocaleString('id-ID')}`;
@@ -41,33 +104,132 @@ export class RiderGame {
     this.host.querySelector('#ride-feedback')!.textContent=j.step===0?'01 · Tas di tengah. Tetap di lajur tengah.':j.step===1?'02 · Pembatas di tengah! Pindah ke kiri atau kanan.':this.feedback;
     this.host.querySelectorAll<HTMLButtonElement>('[data-lane]').forEach(b=>{b.classList.toggle('selected',Number(b.dataset.lane)===j.lane);b.setAttribute('aria-pressed',String(Number(b.dataset.lane)===j.lane));});
   }
-  private burst(hit:boolean,lane:number){this.flash=hit&&document.documentElement.dataset.reducedMotion!=='true'?1:0;for(let i=0;i<18;i++){const a=i*Math.PI*2/18;this.particles.push({x:106+lane*104,y:493,vx:Math.cos(a)*75,vy:Math.sin(a)*75-45,life:1,color:hit?(i%2?'#ff9362':'#ffe4a3'):(i%2?'#fbd569':'#baff8e')});}this.host.querySelector('#ride-feedback')!.classList.toggle('is-hit',hit);}
-  private tick=(time:number)=>{if(this.dead)return;const raw=this.last?time-this.last:0;const dt=raw>0?Math.min(100,raw):0;this.last=time;
-    if(!this.paused){this.elapsed+=dt;this.travel+=dt*.12;const j=this.state().job;this.waveMs=j&&j.step<2?3000:1800;
-      if(j&&this.elapsed>=this.waveMs){this.elapsed=0;const hits=j.hits,orders=j.orders,before=jobReward(j);jobStep(this.state());this.save();const delta=jobReward(j)-before;
-        this.feedback=j.hits>hits?`Aduh! Perbaikan −Rp${Math.abs(delta).toLocaleString('id-ID')}.`:j.orders>orders?`Order masuk! +Rp${delta.toLocaleString('id-ID')}.`:'Lajur aman. Tetap fokus.';
-        if(j.hits>hits||j.orders>orders)this.burst(j.hits>hits,j.lane);
-        if(!this.state().job){const reward=jobReward(j);this.destroy();this.finished(reward,j.orders,j.hits);return;}this.update();
+  private burst(hit:boolean,lane:number){this.flash=hit&&document.documentElement.dataset.reducedMotion!=='true'?1:0;for(let i=0;i<18;i++){const a=i*Math.PI*2/18;this.particles.push({x:LANE_X[lane],y:RIDER_Y,vx:Math.cos(a)*75,vy:Math.sin(a)*75-45,life:1,color:hit?(i%2?'#ff9362':'#ffe4a3'):(i%2?'#fbd569':'#baff8e')});}this.host.querySelector('#ride-feedback')!.classList.toggle('is-hit',hit);}
+  private rebuild(){
+    const j=this.state().job;
+    this.entities=[];this.gates=[];
+    if(!j)return;
+    let y=SPAWN_Y;
+    for(let row=j.step;row<ROAD_LENGTH;row++){
+      this.gates.push({row,y});
+      const cellOrder=row%4===3?5:4;
+      for(const raw of j.rows[row].obstacles){
+        const lane=laneOf(raw);if(lane===null)continue;
+        const cell=row===1?3:1+(row+lane)%2;
+        const size=drawnSize(cell,OBSTACLE_SIZE);
+        this.entities.push({kind:'obstacle',lane,y,w:size.w,h:size.h,resolved:false,row,cell});
       }
-      const targetLane=this.state().job?.lane??this.visualLane;this.visualLane+=(targetLane-this.visualLane)*Math.min(1,dt/85);
+      const orderLane=laneOf(j.rows[row].order??-1);
+      if(orderLane!==null){
+        const size=drawnSize(cellOrder,ORDER_SIZE);
+        this.entities.push({kind:'order',lane:orderLane,y,w:size.w,h:size.h,resolved:false,row,cell:cellOrder});
+      }
+      y-=row<2?TEACH_GAP:ROW_GAP;
+    }
+  }
+  private riderBox():HitBox{
+    const size=drawnSize(0,RIDER_SIZE);
+    const x=LANE_X[0]+(LANE_X[2]-LANE_X[0])*(this.visualLane/2);
+    return {x:x-size.w/2,y:RIDER_Y-size.h/2,w:size.w,h:size.h};
+  }
+  private entityBox(e:LiveEntity):HitBox{
+    return {x:LANE_X[e.lane]-e.w/2,y:e.y-e.h/2,w:e.w,h:e.h};
+  }
+  private settle(rider:HitBox){
+    const s=this.state();
+    const j=s.job;
+    if(!j)return;
+    const hits=j.hits,orders=j.orders,step0=j.step,before=jobReward(j);
+    let scored=false;
+    for(const e of this.entities){
+      if(e.resolved||!s.job)continue;
+      const box=this.entityBox(e);
+      const overlap=aabb(rider,box);
+      const passed=e.y-e.h/2>rider.y+rider.h;
+      if(!overlap&&!passed)continue;
+      e.resolved=true;
+      if(overlap&&e.row===s.job.step){
+        if(e.kind==='obstacle'&&s.job.hits<=s.job.step){jobHit(s);scored=true;}
+        else if(e.kind==='order'&&s.job.orders<=s.job.step){jobCollect(s);scored=true;}
+      }
+    }
+    while(s.job){
+      const row=s.job.step;
+      const ents=this.entities.filter(e=>e.row===row);
+      const pending=ents.some(e=>!e.resolved);
+      if(scored){jobAdvance(s);scored=false;continue;}
+      if(pending)break;
+      if(ents.length===0){
+        const gate=this.gates.find(g=>g.row===row);
+        if(!gate||gate.y<=rider.y+rider.h)break;
+      }
+      jobAdvance(s);
+    }
+    if(!s.job){
+      this.save();
+      this.destroy();
+      this.finished(jobReward(j),j.orders,j.hits);
+      return;
+    }
+    if(j.hits>hits||j.orders>orders){
+      const delta=jobReward(j)-before;
+      this.feedback=j.hits>hits?`Aduh! Perbaikan −Rp${Math.abs(delta).toLocaleString('id-ID')}.`:`Order masuk! +Rp${delta.toLocaleString('id-ID')}.`;
+      const lane=this.entities.find(e=>e.resolved&&((e.kind==='obstacle'&&j.hits>hits)||(e.kind==='order'&&j.orders>orders)))?.lane??j.lane;
+      this.burst(j.hits>hits,lane);
+    }else if(j.step>step0&&j.step>=2){
+      this.feedback='Lajur aman. Tetap fokus.';
+    }
+    if(j.hits!==hits||j.orders!==orders||j.step!==step0){this.save();this.update();}
+  }
+  private tick=(time:number)=>{if(this.dead)return;const raw=this.last?time-this.last:0;const dt=raw>0?Math.min(100,raw):0;this.last=time;
+    if(!this.paused){
+      const j=this.state().job;
+      const speed=j&&j.step<2?TEACH_SPEED:SPEED;
+      this.travel+=dt*speed;
+      for(const g of this.gates)g.y+=dt*speed;
+      for(const e of this.entities)e.y+=dt*speed;
+      const targetLane=j?.lane??this.visualLane;this.visualLane+=(targetLane-this.visualLane)*Math.min(1,dt/85);
       this.flash=Math.max(0,this.flash-dt/450);this.particles.forEach(p=>{p.life-=dt/650;p.x+=p.vx*dt/1000;p.y+=p.vy*dt/1000;});this.particles=this.particles.filter(p=>p.life>0);
+      if(j)this.settle(this.riderBox());
+      if(this.dead)return;
     }else this.visualLane=this.state().job?.lane??this.visualLane;
     this.draw();this.frame=requestAnimationFrame(this.tick);
   };
-  private sprite(cell:number,x:number,y:number,size:number){const c=this.ctx,a=this.atlas;if(!a.complete||!a.naturalWidth)return false;const rects=[[150,100,240,440],[615,75,305,455],[1120,65,290,480],[50,670,435,250],[615,635,310,295],[1120,650,315,285]];const [sx,sy,sw,sh]=rects[cell],scale=size/Math.max(sw,sh);c.save();c.globalCompositeOperation='multiply';c.drawImage(a,sx,sy,sw,sh,x-sw*scale/2,y-sh*scale/2,sw*scale,sh*scale);c.restore();return true;}
+  private sheet(cell:number){
+    const cached=this.sheets[cell];if(cached)return cached;
+    const a=this.atlas;if(!a.complete||!a.naturalWidth)return null;
+    const [sx,sy,sw,sh]=ATLAS[cell];
+    const off=document.createElement('canvas');off.width=sw;off.height=sh;
+    const c=off.getContext('2d')!;c.drawImage(a,sx,sy,sw,sh,0,0,sw,sh);
+    const img=c.getImageData(0,0,sw,sh);knockWhite(img.data,sw,sh);c.putImageData(img,0,0);
+    this.sheets[cell]=off;return off;
+  }
+  private sprite(cell:number,x:number,y:number,size:number){
+    const sheet=this.sheet(cell);if(!sheet)return false;
+    const [, , sw, sh]=ATLAS[cell],scale=size/Math.max(sw,sh);
+    this.ctx.drawImage(sheet,x-sw*scale/2,y-sh*scale/2,sw*scale,sh*scale);return true;
+  }
   private draw(){const c=this.ctx,j=this.state().job;if(!j)return;c.clearRect(0,0,420,600);c.save();if(this.flash)c.translate(Math.sin(this.flash*40)*this.flash*5,0);
     c.fillStyle='#779070';c.fillRect(0,0,420,600);
     if(this.road.complete&&this.road.naturalWidth){const sh=420*this.road.naturalHeight/this.road.naturalWidth,off=this.travel%sh;for(let y=off-sh;y<600;y+=sh)c.drawImage(this.road,0,y,420,sh);}
     else{for(let i=-1;i<7;i++){const y=i*120+this.travel%120;c.fillStyle=i%2?'#dca45d':'#ad7551';c.fillRect(0,y,45,93);c.fillRect(379,y+22,41,91);c.fillStyle='#36544e';c.fillRect(8,y+16,22,38);c.fillRect(388,y+44,22,33);c.fillStyle='#426748';c.beginPath();c.arc(17,y+102,24,0,7);c.arc(409,y+10,28,0,7);c.fill();}}
-    // A stable playable surface keeps collision lanes legible over the illustrated scenery.
-    c.fillStyle='#acb3a7';c.fillRect(48,0,324,600);c.fillStyle='#203a37';c.fillRect(44,0,6,600);c.fillRect(370,0,6,600);c.fillStyle='#dcc58e';c.fillRect(51,0,3,600);c.fillRect(366,0,3,600);
     c.strokeStyle='#faf0d7cc';c.lineWidth=3;c.setLineDash([28,31]);c.lineDashOffset=-this.travel;for(const x of [158,262]){c.beginPath();c.moveTo(x,0);c.lineTo(x,600);c.stroke();}c.setLineDash([]);
     for(let i=0;i<6;i++){const y=(i*137+this.travel*.85)%650;c.strokeStyle='#2b414044';c.lineWidth=2;c.beginPath();c.moveTo(63+(i%3)*104,y);c.lineTo(87+(i%3)*104,y+13);c.stroke();}
-    const row=j.rows[j.step],y=-80+this.elapsed/this.waveMs*578;
-    for(const lane of row.obstacles){const x=106+lane*104;const cell=j.step===1?3:1+(j.step+lane)%2;this.shadow(x,y+(cell===3?13:20),cell===3?43:29,cell===3?13:38);if(!this.sprite(cell,x,y,110)){c.fillStyle='#ea8653';c.strokeStyle='#162e2d';c.lineWidth=5;c.beginPath();c.roundRect(x-28,y-43,56,86,13);c.fill();c.stroke();c.fillStyle='#243e49';c.fillRect(x-21,y-25,42,28);}}
-    if(row.order!==null){const x=106+row.order*104;c.fillStyle='#fbd56922';c.beginPath();c.arc(x,y,39+Math.sin(this.travel*.04)*3,0,7);c.fill();if(!this.sprite(j.step%4===3?5:4,x,y,88)){c.fillStyle='#ffd56c';c.strokeStyle='#283c2d';c.lineWidth=5;c.beginPath();c.roundRect(x-23,y-25,46,49,7);c.fill();c.stroke();c.fillStyle='#344d37';c.font='bold 30px sans-serif';c.textAlign='center';c.fillText('+',x,y+10);}}
-    const x=106+this.visualLane*104;this.shadow(x,523,27,18);c.save();c.translate(x,493);c.rotate((j.lane-this.visualLane)*.11);
-    if(!this.sprite(0,0,0,112)){c.fillStyle='#172e2d';c.fillRect(-10,-20,20,68);c.fillStyle='#48b773';c.strokeStyle='#122d2b';c.lineWidth=5;c.beginPath();c.roundRect(-22,-18,44,47,13);c.fill();c.stroke();c.beginPath();c.arc(0,-25,21,0,7);c.fill();c.stroke();}c.restore();
+    for(const e of this.entities){
+      if(e.y>720||e.y<-200)continue;
+      const x=LANE_X[e.lane];
+      if(e.kind==='obstacle'){
+        this.shadow(x,e.y+(e.cell===3?13:20),e.cell===3?43:29,e.cell===3?13:38);
+        if(!this.sprite(e.cell,x,e.y,OBSTACLE_SIZE)){c.fillStyle='#ea8653';c.strokeStyle='#162e2d';c.lineWidth=5;c.beginPath();c.roundRect(x-e.w/2,e.y-e.h/2,e.w,e.h,13);c.fill();c.stroke();c.fillStyle='#243e49';c.fillRect(x-e.w*0.38,e.y-e.h*0.28,e.w*0.76,e.h*0.32);}
+      }else{
+        c.fillStyle='#fbd56922';c.beginPath();c.arc(x,e.y,39+Math.sin(this.travel*.04)*3,0,7);c.fill();
+        if(!this.sprite(e.cell,x,e.y,ORDER_SIZE)){c.fillStyle='#ffd56c';c.strokeStyle='#283c2d';c.lineWidth=5;c.beginPath();c.roundRect(x-e.w/2,e.y-e.h/2,e.w,e.h,7);c.fill();c.stroke();c.fillStyle='#344d37';c.font='bold 30px sans-serif';c.textAlign='center';c.fillText('+',x,e.y+10);}
+      }
+      if(this.hitbox){c.strokeStyle=e.kind==='order'?'#2f7a3a':'#c23b2a';c.lineWidth=2;c.strokeRect(x-e.w/2,e.y-e.h/2,e.w,e.h);}
+    }
+    const x=LANE_X[0]+(LANE_X[2]-LANE_X[0])*(this.visualLane/2);this.shadow(x,523,27,18);c.save();c.translate(x,RIDER_Y);c.rotate((j.lane-this.visualLane)*.11);
+    if(!this.sprite(0,0,0,RIDER_SIZE)){c.fillStyle='#172e2d';c.fillRect(-10,-20,20,68);c.fillStyle='#48b773';c.strokeStyle='#122d2b';c.lineWidth=5;c.beginPath();c.roundRect(-22,-18,44,47,13);c.fill();c.stroke();c.beginPath();c.arc(0,-25,21,0,7);c.fill();c.stroke();}c.restore();
+    if(this.hitbox){const box=this.riderBox();c.strokeStyle='#7ad0ff';c.lineWidth=2;c.strokeRect(box.x,box.y,box.w,box.h);}
     this.particles.forEach(p=>{c.globalAlpha=p.life;c.fillStyle=p.color;c.save();c.translate(p.x,p.y);c.rotate(p.life*5);c.fillRect(-3,-3,6,6);c.restore();});c.globalAlpha=1;
     const shade=c.createLinearGradient(0,0,0,130);shade.addColorStop(0,'#102923aa');shade.addColorStop(1,'#10292300');c.fillStyle=shade;c.fillRect(0,0,420,130);
     if(this.flash){c.fillStyle=`rgba(239,100,69,${this.flash*.16})`;c.fillRect(0,0,420,600);}c.restore();

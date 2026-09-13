@@ -58,7 +58,7 @@ export interface Loan { principal: number; interest: number; balance: number; du
 export interface RoadRow { obstacles: number[]; order: number | null; }
 export interface Job { step: number; net: number; fare: number; fuel: number; lane: number; hits: number; orders: number; damage: number; rows: RoadRow[]; }
 export interface StoryState {
-  intro: number; guide: number; view: 'room' | 'game' | 'phone' | 'menu'; read: string[]; finale: { roll: number; revealed: number } | null;
+  intro: number; guide: number; view: 'room' | 'phone' | 'menu'; read: string[]; finale: { roll: number; revealed: number } | null;
   flags: string[]; fired: string[]; threads: Record<string, { cursor: number }>; pending: string[];
 }
 export type SlotIndex = 0 | 1 | 2;
@@ -378,17 +378,37 @@ export function moveLane(s: State, lane: number): boolean {
   s.job.lane = lane; return true;
 }
 export const jobReward = (j: Job) => Math.max(1000, j.net + j.orders * 750 - j.hits * j.damage);
-export function jobStep(s: State): boolean {
+export type HitBox = { x: number; y: number; w: number; h: number };
+export function aabb(a: HitBox, b: HitBox): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+export function jobHit(s: State): boolean {
   if (s.ended || !s.job) return false;
-  const j = s.job, row = j.rows[j.step];
-  if (row.obstacles.includes(j.lane)) j.hits++;
-  if (row.order === j.lane) j.orders++;
+  s.job.hits++;
+  return true;
+}
+export function jobCollect(s: State): boolean {
+  if (s.ended || !s.job) return false;
+  s.job.orders++;
+  return true;
+}
+export function jobAdvance(s: State): boolean {
+  if (s.ended || !s.job) return false;
+  const j = s.job;
   j.step++;
   if (j.step === ROAD_LENGTH) {
     const net = jobReward(j); s.cash += net; s.workEarned += net; s.deliveries++; s.job = null;
     log(s, `Order selesai. ${j.orders} bonus, ${j.hits} benturan. Bersih +Rp${net.toLocaleString('id-ID')}.`, 'win'); advanceTime(s, 4);
     queueDueEvents(s);
-  } return true;
+  }
+  return true;
+}
+export function jobStep(s: State): boolean {
+  if (s.ended || !s.job) return false;
+  const j = s.job, row = j.rows[j.step];
+  if (row.obstacles.includes(j.lane)) jobHit(s);
+  if (row.order === j.lane) jobCollect(s);
+  return jobAdvance(s);
 }
 export function endRun(s: State, reason = 'Kamu menyerah pada tagihan yang menumpuk.'): void { s.ended = true; s.ending = reason; s.canHold = false; s.job = null; log(s, reason, 'loss'); }
 export function prestige(s: State): State {
@@ -396,6 +416,9 @@ export function prestige(s: State): State {
   n.logs = [{ text: `Nasib ke-${n.runs}. Ingatan lama, utang yang sama.`, kind: 'info' }]; return n;
 }
 export const SAVE_KEY = 'besok-lunas-v1'; // Stable key so v1 saves can migrate in place.
+// Saves written before Judol lived inside the phone stored the cabinet as its own view.
+// The flag survives exactly one boot so that save reopens the machine, then it is consumed.
+export const RESUME_JUDOL = 'resume-judol';
 export function parseSave(raw: string | null): State | null {
     if (!raw) return null;
   try {
@@ -437,10 +460,12 @@ export function parseSave(raw: string | null): State | null {
       if (!l || !['principal','interest','balance','due','nextLate','lateCount','fees'].every(k => Number.isSafeInteger(l[k as keyof Loan]) && l[k as keyof Loan] >= 0) || l.balance <= 0 || l.lateCount > 3 || l.nextLate < l.due) return null;
     }
     const story = s.story;
-    if (!story || !Number.isInteger(story.intro) || story.intro < 0 || story.intro > 4 || !Number.isInteger(story.guide) || story.guide < 0 || story.guide > 3 || !['room','game','phone','menu'].includes(story.view) || !Array.isArray(story.read) || story.read.some(id => typeof id !== 'string' || id.length > 40)) return null;
+    if (!story || !Number.isInteger(story.intro) || story.intro < 0 || story.intro > 4 || !Number.isInteger(story.guide) || story.guide < 0 || story.guide > 3 || !Array.isArray(story.read) || story.read.some(id => typeof id !== 'string' || id.length > 40)) return null;
     if (story.finale !== null && (!story.finale || !Number.isInteger(story.finale.roll) || story.finale.roll < 0 || story.finale.roll > 99 || !Number.isInteger(story.finale.revealed) || story.finale.revealed < 0 || story.finale.revealed > 3 || (story.finale.revealed === 3) !== s.ended)) return null;
     if (story.flags === undefined) story.flags = [];
     else if (!Array.isArray(story.flags) || story.flags.some(id => typeof id !== 'string')) return null;
+    if ((story.view as string) === 'game') { story.view = 'phone'; story.flags.push(RESUME_JUDOL); }
+    if (!['room', 'phone', 'menu'].includes(story.view)) return null;
     if (story.fired === undefined) story.fired = [];
     else if (!Array.isArray(story.fired) || story.fired.some(id => typeof id !== 'string')) return null;
     if (story.pending === undefined) story.pending = [];

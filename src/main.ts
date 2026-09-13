@@ -6,16 +6,14 @@ import '@fontsource/barlow/latin-900.css';
 import '@fontsource/barlow-condensed/latin-800.css';
 import '@fontsource/barlow-condensed/latin-900.css';
 import './style.css';
-import { fresh, spin, cost, multiplier, upgradeCost, buyUpgrade, payBill, endRun, prestige, insightEarned, parseBank, wrapState, SAVE_KEY, SYMBOLS, UPGRADES, MACHINES, machineDef, machineRequirement, machinePrice, type State, type SaveBank, type Upgrade, type MachineId, tier, feeRate, baseCost, minimumCost, totalDebt, loanDue, blocked as engineBlocked, nextBill, unlockMachine, LOAN_AMOUNTS, quoteLoan, borrow, repayLoan, jobQuote, startJob, jobStep, remainingTime, spinMinutes, jobMinutes, canWork, endDay, dailyObligations, clockTime, finaleReady, beginFinale, revealFinale, FINALE_COST } from './engine';
+import { spin, cost, multiplier, buyUpgrade, payBill, endRun, prestige, insightEarned, parseBank, SAVE_KEY, SYMBOLS, UPGRADES, MACHINES, machineDef, machineRequirement, machinePrice, type State, type SaveBank, type Upgrade, type MachineId, tier, feeRate, minimumCost, totalDebt, loanDue, blocked as engineBlocked, unlockMachine, LOAN_AMOUNTS, quoteLoan, borrow, repayLoan, jobQuote, startJob, remainingTime, spinMinutes, jobMinutes, canWork, endDay, dailyObligations, clockTime, finaleReady, beginFinale, revealFinale, FINALE_COST } from './engine';
 import { GameShell, emptyBank, menuState, applyReducedMotion } from './menu';
 import { createReels, type ReelScene } from './reels';
 import { GameAudio } from './audio';
 import { StoryDirector } from './story';
 import './story.css';
 import './day.css';
-import {renderTree} from './tree';
-let workshopBranch='all';
-import {dayBar, dayPlan} from './day';
+import {dayPlan} from './day';
 import {RiderGame} from './rider';
 import './motion-v1.css';
 
@@ -34,44 +32,12 @@ let shell: GameShell;
 let storageFailed = false;
 let story: StoryDirector | undefined;
 let rider: RiderGame | undefined;
-let lastRenderCash: number | undefined;
-let lastRenderSpins: number | undefined;
-let lastRenderDay: number | undefined;
 
 $('app').innerHTML = `
   <div class="room" aria-hidden="true"></div><div class="vignette" aria-hidden="true"></div>
-  <div class="game-shell">
-    <header class="topbar">
-      <a class="wordmark" href="#" aria-label="Besok Lunas"><span>BESOK</span><strong>LUNAS<span class="wordmark-dot">!</span></strong></a>
-      <div class="tagline">SEKALI LAGI,<br><b>PASTI BALIK.</b></div>
-      <div class="top-actions"><button id="system-open" data-shell="system" class="room-back">Menu</button><button id="back-room" class="room-back">← Kamar</button><button id="open-phone" class="room-back">Ponsel ▣</button><button id="sound" class="icon-button" aria-label="Nyalakan suara">♪</button><button id="help" class="icon-button" aria-label="Cara bermain">?</button></div>
-    </header>
-    <section class="wallet-bar" aria-label="Keuangan">
-      <div class="wallet-item balance"><span class="wallet-icon">Rp</span><div><small>SALDO DI TANGAN</small><strong id="cash"></strong></div></div>
-      <div class="wallet-item debt"><span class="wallet-icon">↗</span><div><small>UTANG BELUM LUNAS</small><strong id="debt"></strong></div></div>
-      <div class="wallet-item fate"><span class="wallet-icon">✦</span><div><small id="run-label"></small><strong id="insight"></strong></div></div>
-      <div class="save-status" id="save-status"><i></i> Tersimpan lokal</div>
-    </section>
-    <div id="day-dashboard"></div><main class="game-layout">
-      <aside class="left-panel tab-panel" data-panel="notes">
-        <section class="paper receipt">
-          <div class="eyebrow">BUKU UTANG</div><h2>Besok dibayar.</h2><p class="receipt-sub">Katanya sih begitu.</p>
-          <div class="receipt-rule"></div>
-          <div class="receipt-row"><span>Putaran</span><b id="spin-count"></b></div>
-          <div class="receipt-row"><span>Cicilan kos berikutnya</span><b id="next-bill"></b></div>
-          <div class="receipt-row"><span>Jatuh tempo</span><b id="deadline"></b></div>
-          <div class="bill-track"><div id="bill-progress"></div></div>
-          <p class="receipt-note">Waktu habis? Tutup hari untuk istirahat.<br>Cicilan kos jatuh tempo tiap hari ke-3.</p>
-          <span class="stamp">BELUM LUNAS</span>
-        </section>
-        <section class="dark-panel paytable"><div class="section-title"><h2>Harga sebuah mimpi</h2><button id="odds" class="text-button">Detail ↗</button></div><p>3 simbol sama · pengali taruhan</p>
-          <div class="symbol-table">${SYMBOLS.map((s, i) => `<div><span class="symbol-art s${i}" role="img" aria-label="${s.name}"></span><b>${s.triple}×</b></div>`).join('')}</div>
-          <div class="pair-note">2 simbol sama juga bayar.</div>
-        </section>
-        <div class="flavor"><span>“</span>Yang kaya mesinnya.<br>Yang berharap kamunya.</div>
-      </aside>
-      <section class="center-panel tab-panel active" data-panel="machine">
-        <div id="first-spin-tip" class="first-spin-tip" hidden><b>03 · PUTARAN PERTAMA</b><span>Tekan PUTAR yang disorot. Dua simbol sama di garis tengah membayar. Setiap spin memakai uang dan waktu; lihat jam di atas.</span></div><div class="life-actions"><button id="ojol"><span class="symbol-art s2"></span><span><b>NARIK OJOL</b><small id="ojol-label">Cari modal dulu</small></span><i>↗</i></button><button id="pinjol"><span class="finance-icon">Rp</span><span><b>PINJOL</b><small id="loan-label">Cair cepat. Bayar berat.</small></span><i>↗</i></button></div>
+  <div id="judol-dock">
+        <div id="judol-block">
+        <div id="first-spin-tip" class="first-spin-tip" hidden><b>03 · PUTARAN PERTAMA</b><span>Tekan PUTAR yang disorot. Dua simbol sama di garis tengah membayar. Setiap spin memakai uang dan waktu; lihat jam di atas.</span></div>
         <div class="pressure-strip"><strong id="pressure"></strong><span id="pressure-next"></span></div>
         <div class="machine-switch"><button id="receh-tab" class="machine-tab selected">01 <b>RECEH REJEKI</b></button><button id="sultan-tab" class="machine-tab">02 <b>SULTAN MALAM</b><span id="sultan-lock">⌑</span></button><button id="cascade-tab" class="machine-tab">03 <b>RANTAI REJEKI</b><span id="cascade-lock">⌑</span></button><button id="buah-tab" class="machine-tab">04 <b>BUAH BERKAH</b><span id="buah-lock">⌑</span></button><button id="petir-tab" class="machine-tab">05 <b>KAKEK PETIR</b><span id="petir-lock">⌑</span></button></div>
         <div class="cabinet" id="cabinet">
@@ -84,17 +50,9 @@ $('app').innerHTML = `
           <div class="machine-controls"><div class="stake"><small>TARUHAN / GARIS</small><div><button id="bet-down" aria-label="Turunkan taruhan">−</button><strong id="bet"></strong><button id="bet-up" aria-label="Naikkan taruhan">+</button></div></div><button id="spin" class="spin-button" disabled><span id="spin-label">PUTAR</span><small id="spin-cost"></small><b>↻</b></button></div>
           <div class="machine-bottom"><button id="auto" class="auto-button"><span class="toggle"><i></i></span> AUTO SPIN <small id="auto-label">TERKUNCI</small></button><span class="keyboard-hint">[ SPASI ] PUTAR</span><button id="turbo-indicator" class="speed-badge" aria-label="Lihat upgrade kecepatan">ϟ <span id="speed">1×</span></button></div>
         </div>
-        <div class="under-machine"><span id="machine-lines">1 GARIS AKTIF</span><span>UANG FIKTIF · NASIB BELUM TENTU</span><span id="payout-mult">1.00× HADIAH</span></div>
-      </section>
-      <aside class="right-panel tab-panel" data-panel="workshop">
-        <section class="workshop dark-panel"><div class="workshop-heading"><span class="tool-symbol">⚒</span><div><div class="eyebrow">BENGKEL MESIN</div><h2>Modal nekat.</h2></div></div><p class="panel-intro">Sedikit diutak-atik. Banyak diharap.</p><div id="upgrades"></div><div class="workshop-tip">Upgrade dibeli dengan saldo.<br>Sisakan cukup untuk putaran berikutnya.</div></section>
-        <section class="prestige-panel"><span class="prestige-symbol">✦</span><div><h2>Ulang Nasib</h2><p id="prestige-copy"></p></div><button id="prestige" aria-label="Buka Ulang Nasib">↗</button></section>
-        <section class="dark-panel log-panel"><div class="section-title"><h2>Kabar terakhir</h2><span class="live-dot"></span></div><div id="logs"></div></section>
-      </aside>
-    </main>
-    <footer class="desktop-footer"><span>BESOK LUNAS <b> / </b> CORE GAMEPLAY PROTOTYPE</span><span>Semua uang & peluang adalah fiksi game.</span><button id="reset" class="text-button">Reset save</button></footer>
+        <div class="under-machine"><span id="machine-lines">1 GARIS AKTIF</span><span><button id="help" class="text-button">CARA BERMAIN</button> · <button id="odds" class="text-button">ODDS MESIN</button></span><span id="payout-mult">1.00× HADIAH</span></div>
+        </div>
   </div>
-  <nav class="mobile-nav" aria-label="Panel game"><button data-tab="machine" class="selected">▣ <span>Mesin</span></button><button data-tab="workshop">⚒ <span>Bengkel</span></button><button data-tab="notes">▤ <span>Catatan</span></button></nav>
   <dialog id="modal"><div class="modal-content"><button id="close-modal" class="modal-close" aria-label="Tutup">×</button><div id="modal-body"></div></div></dialog>
   <div class="toast" id="toast" role="status"></div>
 `;
@@ -119,15 +77,6 @@ function setButton(id: string, disabled: boolean) { $<HTMLButtonElement>(id).dis
 function render() {
   $('first-spin-tip').hidden = state.story.guide !== 2;
   $('spin').classList.toggle('guide-target',state.story.guide===2);
-  $('day-dashboard').innerHTML=dayBar(state);
-  $('cash').textContent = money(state.cash); $('debt').textContent = money(totalDebt(state));
-  $('run-label').textContent = `NASIB KE-${String(state.runs).padStart(2, '0')}`;
-  $('insight').textContent = `${state.insight} ingatan`;
-  $('spin-count').textContent = String(state.spins).padStart(3, '0');
-  $('next-bill').textContent = money(state.bill || nextBill(state));
-  $('deadline').textContent = state.debt === 0 ? 'Lunas' : state.bill ? 'Sekarang' : `Akhir hari ${state.day + (3 - state.day % 3)}`;
-  $('bill-progress').style.width = `${state.bill ? 100 : state.day % 3 / 3 * 100}%`;
-  document.querySelector('.stamp')!.textContent = state.debt === 0 ? 'LUNAS…?' : 'BELUM LUNAS';
   $('bet').textContent = money(state.bet); $('spin-cost').textContent = state.free && state.free.left > 0 ? 'TANPA BIAYA' : `${money(cost(state))} / ${held === null ? 'SPIN' : 'RESPIN'}`;
   $('spin-label').textContent = busy ? 'BERPUTAR…' : held !== null ? 'PUTAR ULANG' : state.free && state.free.left > 0 ? 'PUTAR GRATIS' : 'PUTAR';
   const blocked = busy || engineBlocked(state);
@@ -147,12 +96,6 @@ function render() {
   $('machine-edition').textContent = def.edition;
   $('machine-subtitle').textContent = def.tagline;
   $('machine-lines').textContent = state.free && state.free.left > 0 ? `GRATIS ×${state.free.left} · PENGALI ${state.free.mult}×` : def.linesLabel;
-  const artClass = state.machine <= 2 ? 'symbol-art' : state.machine === 3 ? 'buah-art' : 'petir-art';
-  const cellClass = (i: number) => state.machine <= 2 ? `s${i}` : state.machine === 3 ? `b${i}` : `p${i}`;
-  document.querySelector('.symbol-table')!.innerHTML = def.symbols.map((s, i) => `<div><span class="${artClass} ${cellClass(i)}" role="img" aria-label="${s.name}"></span><b>${s.triple ?? s.pays![2]}×</b></div>`).join('');
-  document.querySelector('.symbol-table')!.classList.toggle('wide', def.symbols.length > 6);
-  document.querySelector('.paytable p')!.textContent = state.machine === 2 ? 'Tripel · sebelum pengali tahap & upgrade' : state.machine === 3 ? 'Tripel buah · wild menggantikan' : state.machine === 4 ? 'Hitung simbol · bayar 4 / 5 / 6+' : '3 simbol sama · pengali taruhan';
-  document.querySelector('.pair-note')!.textContent = state.machine === 2 ? 'Hanya tripel. Tahap 1× → 2× → 4×.' : state.machine === 3 ? 'Durian emas = wild. 3+ lonceng = gratis.' : state.machine === 4 ? 'Bola petir mengali. 3+ gerbang = gratis.' : '2 simbol sama juga bayar.';
   $('cabinet').classList.toggle('sultan', state.machine === 1); $('cabinet').classList.toggle('cascade', state.machine === 2);
   $('cabinet').classList.toggle('buah', state.machine === 3); $('cabinet').classList.toggle('petir', state.machine === 4);
   const tabIds = ['receh-tab', 'sultan-tab', 'cascade-tab', 'buah-tab', 'petir-tab'] as const;
@@ -163,30 +106,11 @@ function render() {
   $('petir-lock').textContent = state.petirUnlocked ? '' : '⌑';
   $('pressure').textContent = `TEKANAN ${tier(state) + 1} · BIAYA MESIN +${Math.round(feeRate(state) * 100)}%`;
   $('pressure-next').textContent = tier(state) < 10 ? `${40 - state.turns % 40} poin tekanan → naik` : 'Tekanan maksimum';
-  $('ojol-label').textContent = state.job ? 'Lanjutkan order aktif' : `Bersih ${money(jobQuote(state).net)} / order`;
-  $('loan-label').textContent = state.loan ? `${money(state.loan.balance)} · akhir hari ${state.loan.due}` : 'Cair cepat. Bayar berat.';
-  setButton('ojol', busy || state.ended || (!state.job && !canWork(state))); setButton('pinjol', busy || state.ended || !!state.job);
-  $('upgrades').innerHTML=renderTree(state,workshopBranch);
-  $('prestige-copy').textContent = insightEarned(state) ? `Mulai lagi dengan +${insightEarned(state)} ingatan.` : `${Math.max(0, 40 - state.spins)} spin menuju ingatan pertama.`;
-  setButton('prestige', busy);
-  $('logs').innerHTML = state.logs.slice(0, 4).map(l => `<div class="log-entry ${l.kind}"><span>${l.kind === 'win' ? '↗' : l.kind === 'loss' ? '↘' : '·'}</span><p>${escape(l.text)}</p></div>`).join('');
-  $('sound').textContent = state.muted ? '♪̸' : '♪'; $('sound').setAttribute('aria-label', state.muted ? 'Nyalakan suara' : 'Matikan suara');
   $('cabinet').classList.toggle('is-spinning', busy);
-  if (lastRenderCash !== undefined && lastRenderCash !== state.cash) pulseValue($('cash'), state.cash > lastRenderCash ? 'gain' : 'loss');
-  if (lastRenderSpins !== undefined && lastRenderSpins !== state.spins) pulseValue($('spin-count'), 'advance');
-  if (lastRenderDay !== undefined && lastRenderDay !== state.day) pulseValue($('day-dashboard'), 'advance');
-  lastRenderCash = state.cash;
-  lastRenderSpins = state.spins;
-  lastRenderDay = state.day;
-  setButton('back-room', busy); setButton('open-phone', busy); story?.render();
+  story?.render();
 }
 let toastTimer: ReturnType<typeof setTimeout>;
 function toast(text: string) { $('toast').textContent = text; $('toast').classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('show'), 3200); }
-function pulseValue(element: HTMLElement, kind: 'gain' | 'loss' | 'advance') {
-  element.classList.remove('value-gain', 'value-loss', 'value-advance');
-  void element.offsetWidth;
-  element.classList.add(kind === 'gain' ? 'value-gain' : kind === 'loss' ? 'value-loss' : 'value-advance');
-}
 function stopAuto() { auto = false; clearTimeout(autoTimer); }
 function showModal(html: string, locked = false) {
   rider?.destroy(); rider=undefined;
@@ -219,11 +143,11 @@ function checkAfterSpin() {
   if (state.job) { showWork(); return; }
   if (remainingTime(state)<spinMinutes(state)) { showDay(); return; }
   if (state.bill || loanDue(state)) { showBill(); return; }
-  if (state.cash < minimumCost(state)) { stopAuto(); if (state.story.view === 'game') showRecovery(); return; }
+  if (state.cash < minimumCost(state)) { stopAuto(); if (story?.judolOpen()) showRecovery(); return; }
   if (state.cash < cost(state)) { stopAuto(); toast('Saldo di bawah biaya spin. Turunkan taruhan, pindah mesin, atau narik ojol.'); render(); }
 }
 async function doSpin() {
-  if (shell.phase !== 'playing' || busy || !scene || state.story.intro < 4 || state.story.view !== 'game' || $<HTMLDialogElement>('modal').open) return;
+  if (shell.phase !== 'playing' || busy || !scene || !story?.judolOpen() || $<HTMLDialogElement>('modal').open) return;
   audio.unlock();
 
   const result = spin(state, held);
@@ -265,7 +189,7 @@ function describeMachine() {
   $('result').innerHTML = `<strong>${machineDef(state.machine).linesLabel}</strong><span>${machineDef(state.machine).help}</span>`;
 }
 function showHelp() {
-  showModal(`<div class="eyebrow">CARA BERMAIN</div><h2>Satu hari.<br>Banyak kebutuhan.</h2><ol class="instructions"><li><b>Atur waktu.</b> Mulai pukul 08:00 dengan 10 jam aktif. Spin memakai ${spinMinutes(state)} menit, shift Ojol ${jobMinutes(state)} menit. Menu dan pesan tidak memakai waktu.</li><li><b>Narik Ojol.</b> Hindari rintangan di 3 lajur dengan ← →, A/D, geser, atau tombol lajur. Tas kuning menambah Rp750. Benturan memotong Rp600. Hasil bersih minimal Rp1.000. Ojol tetap ada kalau mesin menguras saldo.</li><li><b>Cicilan.</b> Kos ditagih setiap hari ke-3. Pinjol harus lunas pada akhir hari yang tertulis di kontrak. Tutup hari membayar otomatis; kalau kurang, run berakhir.</li><li><b>Upgrade.</b> Ritme Sehat memperpanjang waktu aktif. Rute & Fokus mengurangi waktu order dan spin. Mesin Ngebut hanya mempercepat animasi. Pengali Cuan I membuat Receh cukup untuk hidup tanpa narik setiap jam.</li><li><b>Mesin.</b> Receh membayar garis tengah; Sultan tiga baris; Rantai hanya tripel dengan cascade 1×/2×/4×; Buah Berkah memakai wild durian emas dan scatter lonceng berisi putaran gratis; Kakek Petir membayar simbol sama di mana saja dengan tumble dan pengali bola petir. Hold berbayar tersedia sekali sesudah spin normal (tidak di Rantai/Petir). Kalau Sultan menguras, kembali ke Receh. Kalau Receh kosong, narik Ojol.</li><li><b>Istirahat.</b> Tekan TUTUP HARI di kamar atau mesin untuk melihat rencana dan masuk hari berikutnya.</li></ol><button class="primary-button" data-action="close">MENGERTI</button>`);
+  showModal(`<div class="eyebrow">CARA BERMAIN</div><h2>Satu hari.<br>Banyak kebutuhan.</h2><ol class="instructions"><li><b>Atur waktu.</b> Mulai pukul 08:00 dengan 10 jam aktif. Spin memakai ${spinMinutes(state)} menit, shift Ojol ${jobMinutes(state)} menit. Menu dan pesan tidak memakai waktu.</li><li><b>Narik Ojol.</b> Hindari rintangan di 3 lajur dengan ← →, A/D, geser, atau tombol lajur. Tas kuning menambah Rp750. Benturan memotong Rp600. Hasil bersih minimal Rp1.000. Ojol tetap ada kalau mesin menguras saldo.</li><li><b>Cicilan.</b> Kos ditagih setiap hari ke-3. Pinjol harus lunas pada akhir hari yang tertulis di kontrak. Tutup hari membayar otomatis; kalau kurang, run berakhir.</li><li><b>Upgrade.</b> Ritme Sehat memperpanjang waktu aktif. Rute & Fokus mengurangi waktu order dan spin. Mesin Ngebut hanya mempercepat animasi. Pengali Cuan I membuat Receh cukup untuk hidup tanpa narik setiap jam.</li><li><b>Mesin.</b> Receh membayar garis tengah; Sultan tiga baris; Rantai hanya tripel dengan cascade 1×/2×/4×; Buah Berkah memakai wild durian emas dan scatter lonceng berisi putaran gratis; Kakek Petir membayar simbol sama di mana saja dengan tumble dan pengali bola petir. Hold berbayar tersedia sekali sesudah spin normal (tidak di Rantai/Petir). Kalau Sultan menguras, kembali ke Receh. Kalau Receh kosong, narik Ojol.</li><li><b>Istirahat.</b> Tekan TUTUP HARI di kamar untuk melihat rencana dan masuk hari berikutnya.</li></ol><button class="primary-button" data-action="close">MENGERTI</button>`);
 }
 function showOdds() {
   const def = machineDef(state.machine);
@@ -283,11 +207,6 @@ function showOdds() {
   }
   showModal(`<div class="eyebrow">PEMBAYARAN MESIN</div><h2>${def.name}</h2><p>Pengali hadiah saat ini: <b>${multiplier(state).toFixed(2)}×</b>. Nilai berikut adalah pengali taruhan.</p>${table}<p>${foot} Pasangan kopi mengembalikan taruhan; biaya tekanan tetap bisa menguras saldo. Kalau begitu, turun ke mesin yang lebih murah, atau narik Ojol.</p><p>Biaya tekanan: +${Math.round(feeRate(state) * 100)}%. Spin memakai ${spinMinutes(state)} menit. Semua uang dan hasil adalah fiksi game.</p>`);
 }
-function selectTab(tab: string) {
-  document.body.dataset.panel=tab;
-  document.querySelectorAll<HTMLElement>('[data-panel]').forEach(p => p.classList.toggle('active', p.dataset.panel === tab));
-  document.querySelectorAll<HTMLElement>('[data-tab]').forEach(p => p.classList.toggle('selected', p.dataset.tab === tab));
-}
 function openPrestige() {
   if (busy) return;
   if (state.ended) return showEnding();
@@ -296,19 +215,14 @@ function openPrestige() {
 document.addEventListener('click', e => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!b || b.disabled) return;
   audio.unlock();
-  if(b.dataset.story==='tree-filter'&&b.closest('#upgrades')){workshopBranch=b.dataset.branch!;render();document.querySelector<HTMLButtonElement>(`#upgrades [data-branch="${workshopBranch}"]`)?.focus({preventScroll:true});return;}
   if(b.dataset.treeMachine){const mode=Number(b.dataset.treeMachine) as 1|2|3|4;if(!busy&&unlockMachine(state,mode)){save();render();toast('Mesin baru terbuka. Buka dari aplikasi Judol.');}return;}
-  if (b.dataset.tab) { selectTab(b.dataset.tab); return; }
   if (b.dataset.hold !== undefined && !busy) { const i = Number(b.dataset.hold); held = held === i ? null : i; render(); return; }
   if (b.dataset.upgrade && !busy) {
     if (buyUpgrade(state, b.dataset.upgrade as Upgrade)) { audio.play('buy'); save(); render(); toast(`${UPGRADES[b.dataset.upgrade as Upgrade].name} terpasang!`); checkAfterSpin(); }
     return;
   }
   switch (b.id) {
-    case 'back-room': if (!busy) { stopAuto(); story?.toRoom(); } break;
-    case 'open-phone': if (!busy) { stopAuto(); story?.toPhone(); } break;
     case 'spin': void doSpin(); break;
-    case 'sound': state.muted = !state.muted; bank.settings.muted = state.muted; audio.muted = state.muted; save(); render(); break;
     case 'help': showHelp(); break;
     case 'odds': showOdds(); break;
     case 'close-modal': closeModal(); break;
@@ -317,18 +231,14 @@ document.addEventListener('click', e => {
     case 'cascade-tab': setMachine(2); break;
     case 'buah-tab': setMachine(3); break;
     case 'petir-tab': setMachine(4); break;
-    case 'ojol': showWork(); break;
-    case 'pinjol': showFinance(); break;
     case 'bet-up': case 'bet-down': {
       if (busy) break; stopAuto(); held = null; state.canHold = false;
       const bets = [1000, 2000, 5000]; state.bet = bets[Math.max(0, Math.min(2, bets.indexOf(state.bet) + (b.id === 'bet-up' ? 1 : -1)))]; save(); render(); break;
     }
     case 'auto':
-      if (!state.upgrades.auto) { selectTab('workshop'); toast('Beli Jempol Otomatis di Bengkel untuk membuka auto-spin.'); break; }
+      if (!state.upgrades.auto) { toast('Beli Jempol Otomatis di Rencana untuk membuka auto-spin.'); break; }
       auto = !auto; held = null; clearTimeout(autoTimer); render(); if (auto && !busy) void doSpin(); break;
-    case 'turbo-indicator': selectTab('workshop'); toast('Mesin Ngebut mempercepat animasi reel.'); break;
-    case 'prestige': openPrestige(); break;
-    case 'reset': if (!busy) showModal('<div class="eyebrow">RESET SAVE</div><h2>Hapus semuanya?</h2><p>Ini menghapus run dan seluruh ingatan permanen pada perangkat ini.</p><button class="primary-button danger" data-action="reset">HAPUS SAVE</button><button class="secondary-button" data-action="close">Batal</button>'); break;
+    case 'turbo-indicator': toast('Mesin Ngebut mempercepat animasi reel. Beli di Rencana.'); break;
   }
   switch (b.dataset.action) {
     case 'close': closeModal(); break;
@@ -346,18 +256,17 @@ document.addEventListener('click', e => {
     case 'reveal-finale': if (revealFinale(state)) { save(); render(); showFinale(); } break;
     case 'end': endRun(state); save(); render(); showEnding(); break;
     case 'unlock': { const m = Number(b.dataset.machine) as 1 | 2 | 3 | 4; if (unlockMachine(state, m)) { closeModal(); setMachine(m); audio.play('buy'); save(); render(); checkAfterSpin(); } break; }
-    case 'rebirth': case 'reset':
+    case 'rebirth':
       if (busy) break; stopAuto();
-      if (b.dataset.action === 'reset') { state = fresh(); state.muted = bank.settings.muted; bank = wrapState(state, bank.settings); }
-      else state = prestige(state);
+      state = prestige(state);
       audio.muted = state.muted; held = null;
-      scene?.display(state.grid); scene?.setMachine(0); closeModal(); save(); render(); selectTab('machine');
+      scene?.display(state.grid); scene?.setMachine(0); closeModal(); save(); render();
       $('result').classList.remove('winning'); $('result').innerHTML = '<strong>NASIB BARU. MIMPI LAMA.</strong><span>Satu putaran lagi?</span>'; story?.render(); break;
   }
 });
 $<HTMLDialogElement>('modal').addEventListener('cancel', e => { if ($<HTMLDialogElement>('modal').dataset.locked === 'true') e.preventDefault(); else {rider?.destroy();rider=undefined;} });
 document.addEventListener('keydown', e => {
-  if (shell.phase !== 'playing' || e.repeat || state.story.intro < 4 || state.story.view !== 'game' || $<HTMLDialogElement>('modal').open || ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) return;
+  if (shell.phase !== 'playing' || e.repeat || !story?.judolOpen() || $<HTMLDialogElement>('modal').open || ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) return;
   if ((e.target as HTMLElement).tagName === 'BUTTON' && [' ', 'Enter'].includes(e.key)) return;
   if (e.code === 'Space') { e.preventDefault(); void doSpin(); }
   if (['1', '2', '3'].includes(e.key)) $<HTMLButtonElement>(`hold-${Number(e.key) - 1}`).click();
@@ -398,11 +307,10 @@ shell = new GameShell({
   pauseRide: () => { rider?.pause(); },
   notice: toast,
 });
-story = new StoryDirector({ state: () => state, save, work: showWork, finance: showFinance,
-  game: () => { stopAuto(); selectTab('machine'); render(); if(state.story.guide===2)requestAnimationFrame(()=>$('spin').scrollIntoView({block:'center',behavior:'smooth'})); },
-  shop: () => { stopAuto(); selectTab('workshop'); render(); },
+story = new StoryDirector({ state: () => state, save, work: showWork, finance: showFinance, judol: render,
   finale: showFinale, restart: openPrestige,
-  leaveApp: () => {rider?.destroy();rider=undefined;},
+  leaveApp: () => { stopAuto(); rider?.destroy(); rider = undefined; },
+  cabinet: $('judol-block'),
   blocked: () => busy || $<HTMLDialogElement>('modal').open,
   onEscape: () => shell.handleEscape(),
   system: () => shell.openSystem(),
@@ -412,7 +320,7 @@ story.render();
 createReels(state.grid, state.machine, ready => {
   scene = ready; $('loading').hidden = true;
   if (shell.phase === 'playing') {
-    scene.display(state.grid); scene.setMode(state.machine); render(); describeMachine(); checkAfterSpin();
+    scene.display(state.grid); scene.setMachine(state.machine); render(); describeMachine(); checkAfterSpin();
   }
 });
 render();
